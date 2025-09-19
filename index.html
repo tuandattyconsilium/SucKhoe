@@ -386,29 +386,49 @@
       }
     }
 
-    // Xuất CSV
-    document.getElementById('exportBtn').addEventListener('click', async () => {
-      showLoading(true);
-      const headers = ["date", "weight", "bp_s", "bp_d", "hr", "sleep", "steps", "notes"];
-      const csvRows = [];
-      csvRows.push(headers.join(','));
-      data.forEach(entry => {
-        const values = headers.map(header => {
-          const value = entry[header] !== undefined && entry[header] !== null ? entry[header] : '';
-          return JSON.stringify(value);
-        });
-        csvRows.push(values.join(','));
-      });
-      const csvString = csvRows.join('\n');
-      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', 'health_data.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showLoading(false);
+  // Xuất CSV (header tiếng Việt)
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  showLoading(true);
+
+  // map key -> tiếng Việt
+  const headersMap = {
+    date: "Ngày",
+    weight: "Cân nặng (kg)",
+    bp_s: "Huyết áp (tâm thu)",
+    bp_d: "Huyết áp (tâm trương)",
+    hr: "Nhịp tim (bpm)",
+    sleep: "Giấc ngủ (giờ)",
+    steps: "Bước chân",
+    notes: "Ghi chú"
+  };
+
+  const keys = Object.keys(headersMap);
+  const csvRows = [];
+
+  // Dòng header tiếng Việt
+  csvRows.push(keys.map(k => `"${headersMap[k]}"`).join(','));
+
+  // Dữ liệu
+  data.forEach(entry => {
+    const values = keys.map(k => {
+      const value = entry[k] !== undefined && entry[k] !== null ? entry[k] : '';
+      return `"${String(value).replace(/"/g, '""')}"`; // escape dấu "
     });
+    csvRows.push(values.join(','));
+  });
+
+  const csvString = csvRows.join('\n');
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', 'suc_khoe.csv'); // tên file tiếng Việt
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  showLoading(false);
+});
+
 
     // Xoá toàn bộ (lặp over docs)
     document.getElementById('clearBtn').addEventListener('click', async () => {
