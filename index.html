@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Theo dõi sức khỏe — Daily Health Tracker</title>
   <style>
-    :root{--accent:#0b8f6e;--muted:#666}
+    :root{--accent:#0b8f6e;--muted:#666;--danger:#dc2626}
     *{box-sizing:border-box}
     body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;margin:0;padding:16px;background:#f6fbf8;color:#0b2b20}
     .wrap{max-width:980px;margin:0 auto}
@@ -14,15 +14,17 @@
     .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(12,30,20,0.06);margin-top:14px}
     form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
     label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
-    input[type="number"], input[type="text"], input[type="date"], textarea, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6efe9;font-size:14px}
+    input[type="number"], input[type="text"], input[type="date"], input[type="password"], textarea, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6efe9;font-size:14px}
     textarea{min-height:60px}
     .row{display:flex;gap:8px}
-    button{background:var(--accent);color:#fff;border:0;padding:10px 12px;border-radius:10px;cursor:pointer}
+    button{background:var(--accent);color:#fff;border:0;padding:10px 12px;border-radius:10px;cursor:pointer;transition:background-color 0.2s}
     button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(11,143,110,0.14)}
+    button.danger{background:var(--danger)}
+    button:hover{filter:brightness(1.1)}
     table{width:100%;border-collapse:collapse;margin-top:12px}
     th,td{padding:8px 10px;border-bottom:1px solid #f0f3f1;font-size:13px;text-align:left}
     .small{font-size:12px;color:var(--muted)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .chart-wrap{height:220px;margin-top:12px;background:#fff;border-radius:10px;padding:10px}
     #loading {
         position: fixed;
@@ -35,6 +37,7 @@
         border-radius: 10px;
         display: none;
         z-index: 1000;
+        text-align: center;
     }
     .modal {
       position: fixed;
@@ -46,33 +49,121 @@
       display: none;
       justify-content: center;
       align-items: center;
+      z-index: 1001;
     }
     .modal-content {
       background: white;
       padding: 20px;
       border-radius: 10px;
       text-align: center;
+      max-width: 400px;
+    }
+    #auth-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        height: 80vh;
+        gap: 16px;
+    }
+    .tab-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #e6efe9;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font-size: 16px;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-bottom-color 0.2s;
+    }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .form-section {
+      display: none;
+    }
+    .form-section.active {
+      display: block;
+    }
+    .alert-message {
+      color: var(--danger);
+      font-size: 14px;
+      margin-top: 10px;
     }
     @media (max-width:520px){header{flex-direction:column;align-items:flex-start} .chart-wrap{height:200px}}
   </style>
 </head>
 <body>
-  <div class="wrap">
+  
+  <!-- Container Đăng nhập -->
+  <div id="auth-container">
+    <div class="card" style="width: 100%; max-width: 400px; padding: 20px">
+        <h2 style="margin: 0; text-align: center;">Đăng nhập</h2>
+        <div class="form-section active" id="loginFormSection">
+            <form id="loginForm">
+                <label>Email</label>
+                <input type="email" id="loginEmail" required>
+                <div style="height: 12px;"></div>
+                <label>Mật khẩu</label>
+                <input type="password" id="loginPassword" required>
+                <div style="height: 16px;"></div>
+                <button type="submit" style="width: 100%">Đăng nhập</button>
+            </form>
+        </div>
+        <p class="alert-message" id="authErrorMsg"></p>
+    </div>
+  </div>
+
+  <!-- Container Ứng dụng chính -->
+  <div class="wrap" id="app-container" style="display: none;">
     <header>
       <div>
         <h1>Theo dõi & chăm sóc sức khoẻ hằng ngày</h1>
         <p class="small">Ghi lại nhanh các chỉ số: cân nặng, huyết áp, nhịp tim, giấc ngủ, bước chân.</p>
+        <p class="small">Họ và tên: <b id="user-name">N/A</b> | Tuổi: <b id="user-age">N/A</b> | Nơi ở: <b id="user-location">N/A</b></p>
+        <p class="small">ID người dùng: <b id="user-id-display"></b></p>
       </div>
       <div class="controls">
+        <button id="addAccountBtn" style="display: none;">Thêm tài khoản</button>
+        <button id="changePasswordBtn">Đổi mật khẩu</button>
         <button id="exportBtn">Xuất CSV</button>
         <button id="clearBtn" class="ghost">Xoá toàn bộ</button>
         <label for="importFile" class="ghost" style="padding:8px 12px;border-radius:10px;cursor:pointer">Nhập CSV
           <input id="importFile" type="file" accept="text/csv" style="display:none">
         </label>
+        <button id="logoutBtn" class="danger">Đăng xuất</button>
       </div>
     </header>
+    
+    <section class="card" id="profileFormCard" style="display: none;">
+        <h3 style="margin-top:0">Cập nhật hồ sơ</h3>
+        <form id="profileForm" class="grid" autocomplete="off">
+            <div>
+                <label>Họ và tên</label>
+                <input type="text" id="name" placeholder="Họ và tên">
+            </div>
+            <div>
+                <label>Tuổi</label>
+                <input type="number" id="age" placeholder="Tuổi">
+            </div>
+            <div>
+                <label>Nơi ở</label>
+                <input type="text" id="location" placeholder="Tỉnh/Thành phố">
+            </div>
+            <div style="grid-column:1/-1;text-align:right">
+                <button type="submit">Lưu hồ sơ</button>
+            </div>
+        </form>
+    </section>
 
-    <section class="card">
+    <section class="card" id="entryFormCard">
       <form id="entryForm" class="grid" autocomplete="off">
         <div>
           <label>Ngày</label>
@@ -115,12 +206,47 @@
     <div class="modal" id="myModal">
       <div class="modal-content">
         <p id="modalMessage"></p>
+        <div style="height: 10px;"></div>
         <button id="modalOkBtn">Đóng</button>
       </div>
     </div>
+    
+    <div class="modal" id="addAccountModal">
+        <div class="modal-content">
+            <h3 style="margin-top:0">Thêm tài khoản mới</h3>
+            <form id="addAccountForm">
+                <label>Email</label>
+                <input type="email" id="newEmail" required>
+                <div style="height: 12px;"></div>
+                <label>Mật khẩu</label>
+                <input type="password" id="newPassword" required>
+                <div style="height: 12px;"></div>
+                <button type="submit">Tạo tài khoản</button>
+                <p class="alert-message" id="addAccountErrorMsg"></p>
+            </form>
+            <div style="height: 10px;"></div>
+            <button id="closeAddAccountModal" class="ghost">Đóng</button>
+        </div>
+    </div>
+    
+    <div class="modal" id="changePasswordModal">
+        <div class="modal-content">
+            <h3 style="margin-top:0">Đổi mật khẩu</h3>
+            <form id="changePasswordForm">
+                <label>Mật khẩu mới</label>
+                <input type="password" id="newPassword" required>
+                <div style="height: 12px;"></div>
+                <button type="submit">Đổi mật khẩu</button>
+                <p class="alert-message" id="changePasswordErrorMsg"></p>
+            </form>
+            <div style="height: 10px;"></div>
+            <button id="closeChangePasswordModal" class="ghost">Đóng</button>
+        </div>
+    </div>
+
     <div id="loading" style="display: none;">Đang xử lý...</div>
 
-    <section class="card">
+    <section class="card" id="historyCard">
       <h3 style="margin:0 0 8px 0">Lịch sử</h3>
       <div style="overflow:auto;max-height:400px">
         <table id="healthTable">
@@ -142,7 +268,7 @@
       </div>
     </section>
     
-    <section class="card">
+    <section class="card" id="chartCard">
         <h3 style="margin:0 0 8px 0">Biểu đồ</h3>
         <div class="chart-wrap">
             <canvas id="healthChart"></canvas>
@@ -152,9 +278,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module">
-    // Firebase: chỉ dùng App + Firestore (KHÔNG dùng Auth / UID)
+    // Firebase: Thêm các module Auth cần thiết
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, getDocs, query, orderBy, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     setLogLevel('Debug');
@@ -169,15 +296,34 @@
       measurementId: "G-G51BKKHGL3"
     };
 
-    // Khởi tạo
+    // Khởi tạo Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
-    // --- Globals ---
+    // Globals
     let data = [];
     let myChart = null;
+    let isAdmin = false;
 
+    // Elements
+    const authContainer = document.getElementById('auth-container');
+    const appContainer = document.getElementById('app-container');
+    const loginForm = document.getElementById('loginForm');
+    const authErrorMsg = document.getElementById('authErrorMsg');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
+    const addAccountBtn = document.getElementById('addAccountBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const importFile = document.getElementById('importFile');
+    const userDisplay = document.getElementById('user-id-display');
+    const userName = document.getElementById('user-name');
+    const userAge = document.getElementById('user-age');
+    const userLocation = document.getElementById('user-location');
     const entryForm = document.getElementById('entryForm');
+    const profileForm = document.getElementById('profileForm');
+    const profileFormCard = document.getElementById('profileFormCard');
     const healthTableBody = document.querySelector('#healthTable tbody');
     const loadingIndicator = document.getElementById('loading');
     const modal = document.getElementById('myModal');
@@ -185,25 +331,153 @@
     const modalOkBtn = document.getElementById('modalOkBtn');
     const saveButton = entryForm.querySelector('button[type="submit"]');
 
+    // Modals
+    const addAccountModal = document.getElementById('addAccountModal');
+    const addAccountForm = document.getElementById('addAccountForm');
+    const addAccountErrorMsg = document.getElementById('addAccountErrorMsg');
+    const closeAddAccountModal = document.getElementById('closeAddAccountModal');
+    
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const changePasswordErrorMsg = document.getElementById('changePasswordErrorMsg');
+    const closeChangePasswordModal = document.getElementById('closeChangePasswordModal');
+
+    // Hàm hiển thị modal thông báo
     function showModal(message) {
       modalMessage.textContent = message;
       modal.style.display = 'flex';
     }
     modalOkBtn.onclick = () => { modal.style.display = 'none'; };
 
+    // Hàm hiển thị modal thêm tài khoản
+    addAccountBtn.addEventListener('click', () => {
+        addAccountModal.style.display = 'flex';
+        addAccountErrorMsg.textContent = '';
+    });
+    closeAddAccountModal.addEventListener('click', () => {
+        addAccountModal.style.display = 'none';
+        addAccountForm.reset();
+    });
+    
+    // Hàm hiển thị modal đổi mật khẩu
+    changePasswordBtn.addEventListener('click', () => {
+        changePasswordModal.style.display = 'flex';
+        changePasswordErrorMsg.textContent = '';
+    });
+    closeChangePasswordModal.addEventListener('click', () => {
+        changePasswordModal.style.display = 'none';
+        changePasswordForm.reset();
+    });
+
+    // Hàm hiển thị loading
     function showLoading(show) {
       loadingIndicator.style.display = show ? 'block' : 'none';
       saveButton.disabled = show;
+      logoutBtn.disabled = show;
+      exportBtn.disabled = show;
+      clearBtn.disabled = show;
+      importFile.disabled = show;
+      changePasswordBtn.disabled = show;
+      if (isAdmin) {
+          addAccountBtn.disabled = show;
+      }
     }
 
-    // Collection path cố định (không dùng UID)
-    function getCollectionPath() {
-      return 'health_entries';
+    // Lấy collection path dựa trên user ID
+    function getCollectionPath(uid) {
+        if (!uid) return null;
+        return `users/${uid}/health_entries`;
     }
 
-    // Lắng nghe realtime (query theo date nếu có)
-    function startFirestoreListener() {
-      const colRef = collection(db, getCollectionPath());
+    // Lắng nghe trạng thái xác thực
+    onAuthStateChanged(auth, async (user) => {
+        showLoading(true);
+        if (user) {
+            // Người dùng đã đăng nhập
+            authContainer.style.display = 'none';
+            appContainer.style.display = 'block';
+            userDisplay.textContent = user.uid;
+            
+            // Lấy thông tin hồ sơ
+            const profileDoc = await getDoc(doc(db, "users", user.uid));
+            if (profileDoc.exists()) {
+                const profileData = profileDoc.data();
+                userName.textContent = profileData.name || "N/A";
+                userAge.textContent = profileData.age || "N/A";
+                userLocation.textContent = profileData.location || "N/A";
+                profileFormCard.style.display = 'none';
+            } else {
+                userName.textContent = "N/A";
+                userAge.textContent = "N/A";
+                userLocation.textContent = "N/A";
+                profileFormCard.style.display = 'block';
+            }
+
+            // Kiểm tra role admin dựa trên email
+            if (user.email === 'admin@myapp.com') {
+                isAdmin = true;
+                addAccountBtn.style.display = 'block';
+            } else {
+                isAdmin = false;
+                addAccountBtn.style.display = 'none';
+            }
+
+            // Bắt đầu lắng nghe dữ liệu cho người dùng hiện tại
+            startFirestoreListener(getCollectionPath(user.uid));
+        } else {
+            // Người dùng đã đăng xuất
+            authContainer.style.display = 'flex';
+            appContainer.style.display = 'none';
+            userDisplay.textContent = 'N/A';
+            userName.textContent = 'N/A';
+            userAge.textContent = 'N/A';
+            userLocation.textContent = 'N/A';
+            data = [];
+            renderTable();
+            if (myChart) {
+                myChart.destroy();
+                myChart = null;
+            }
+        }
+        showLoading(false);
+    });
+
+    // Lưu hồ sơ
+    profileForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading(true);
+        const user = auth.currentUser;
+        if (!user) {
+            showModal("Bạn cần đăng nhập để lưu dữ liệu.");
+            showLoading(false);
+            return;
+        }
+
+        const profile = {
+            name: document.getElementById('name').value,
+            age: document.getElementById('age').value,
+            location: document.getElementById('location').value,
+            timestamp: new Date()
+        };
+
+        try {
+            await setDoc(doc(db, "users", user.uid), profile, { merge: true });
+            showModal("Hồ sơ đã được lưu thành công!");
+            profileFormCard.style.display = 'none';
+            userName.textContent = profile.name || "N/A";
+            userAge.textContent = profile.age || "N/A";
+            userLocation.textContent = profile.location || "N/A";
+        } catch (error) {
+            console.error("Lỗi khi lưu hồ sơ: ", error);
+            showModal("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
+        } finally {
+            showLoading(false);
+        }
+    });
+
+    // Lắng nghe realtime từ Firestore
+    function startFirestoreListener(collectionPath) {
+      const colRef = collection(db, collectionPath);
       const q = query(colRef, orderBy('date'));
       onSnapshot(q, (snapshot) => {
         showLoading(true);
@@ -248,7 +522,7 @@
       });
     }
 
-    // Render chart (giữ nhiều dataset như gốc)
+    // Render chart
     function renderChart() {
       const dates = data.map(entry => entry.date);
       const weights = data.map(entry => entry.weight);
@@ -331,10 +605,87 @@
       });
     }
 
-    // Submit form: lưu vào collection 'health_entries'
+    // Đăng nhập
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading(true);
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            authErrorMsg.textContent = '';
+        } catch (error) {
+            console.error(error);
+            authErrorMsg.textContent = "Đăng nhập thất bại. Vui lòng kiểm tra lại email/mật khẩu.";
+        } finally {
+            showLoading(false);
+        }
+    });
+    
+    // Thêm tài khoản (chỉ admin)
+    addAccountForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading(true);
+        const email = document.getElementById('newEmail').value;
+        const password = document.getElementById('newPassword').value;
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            showModal(`Đã tạo tài khoản mới: ${email}`);
+            addAccountModal.style.display = 'none';
+            addAccountForm.reset();
+        } catch (error) {
+            console.error(error);
+            addAccountErrorMsg.textContent = "Lỗi khi tạo tài khoản. Email có thể đã tồn tại hoặc mật khẩu quá yếu.";
+        } finally {
+            showLoading(false);
+        }
+    });
+    
+    // Đổi mật khẩu
+    changePasswordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading(true);
+        const user = auth.currentUser;
+        const newPassword = document.getElementById('newPassword').value;
+        if (user) {
+            try {
+                await updatePassword(user, newPassword);
+                showModal("Mật khẩu đã được đổi thành công!");
+                changePasswordModal.style.display = 'none';
+                changePasswordForm.reset();
+            } catch (error) {
+                console.error(error);
+                changePasswordErrorMsg.textContent = "Lỗi khi đổi mật khẩu. Vui lòng thử lại sau.";
+            } finally {
+                showLoading(false);
+            }
+        }
+    });
+
+    // Đăng xuất
+    logoutBtn.addEventListener('click', async () => {
+        showLoading(true);
+        try {
+            await signOut(auth);
+            showModal("Bạn đã đăng xuất thành công.");
+        } catch (error) {
+            console.error(error);
+            showModal("Lỗi khi đăng xuất.");
+        } finally {
+            showLoading(false);
+        }
+    });
+
+    // Submit form: lưu vào collection
     entryForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       showLoading(true);
+      const user = auth.currentUser;
+      if (!user) {
+          showModal("Bạn cần đăng nhập để lưu dữ liệu.");
+          showLoading(false);
+          return;
+      }
       const entry = {
         date: document.getElementById('date').value,
         weight: parseFloat(document.getElementById('weight').value) || null,
@@ -348,7 +699,7 @@
       };
 
       try {
-        await addDoc(collection(db, getCollectionPath()), entry);
+        await addDoc(collection(db, getCollectionPath(user.uid)), entry);
         showModal("Dữ liệu đã được lưu thành công!");
         entryForm.reset();
       } catch (error) {
@@ -363,133 +714,136 @@
     async function handleDelete(e) {
       showLoading(true);
       const docId = e.target.getAttribute('data-id');
-      if (!docId) {
-        showLoading(false);
-        return;
+      const user = auth.currentUser;
+      if (!user || !docId) {
+          showLoading(false);
+          return;
       }
       try {
-        await deleteDoc(collection(db, getCollectionPath()).doc ? collection(db, getCollectionPath()).doc(docId) : (async () => { /* fallback */ })());
-        // fallback: Firestore modular doesn't attach .doc on collection() — use doc() helper instead
-      } catch (err) {
-        // We'll perform delete correctly using doc() from modular API
-        try {
-          // dynamic import of doc and deleteDoc to ensure correct usage
-          const { doc, deleteDoc: del } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then(m => ({ doc: m.doc, deleteDoc: m.deleteDoc }));
-          await del(doc(db, getCollectionPath(), docId));
-          showModal("Dữ liệu đã được xóa thành công!");
-        } catch (error) {
-          console.error("Lỗi khi xóa tài liệu: ", error);
-          showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
-        }
+        await deleteDoc(doc(db, getCollectionPath(user.uid), docId));
+        showModal("Dữ liệu đã được xóa thành công!");
+      } catch (error) {
+        console.error("Lỗi khi xóa tài liệu: ", error);
+        showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
       } finally {
         showLoading(false);
       }
     }
 
-  // Xuất CSV (header tiếng Việt)
-document.getElementById('exportBtn').addEventListener('click', async () => {
-  showLoading(true);
-
-  // map key -> tiếng Việt
-  const headersMap = {
-    date: "Ngày",
-    weight: "Cân nặng (kg)",
-    bp_s: "Huyết áp (tâm thu)",
-    bp_d: "Huyết áp (tâm trương)",
-    hr: "Nhịp tim (bpm)",
-    sleep: "Giấc ngủ (giờ)",
-    steps: "Bước chân",
-    notes: "Ghi chú"
-  };
-
-  const keys = Object.keys(headersMap);
-  const csvRows = [];
-
-  // Dòng header tiếng Việt
-  csvRows.push(keys.map(k => `"${headersMap[k]}"`).join(','));
-
-  // Dữ liệu
-  data.forEach(entry => {
-    const values = keys.map(k => {
-      const value = entry[k] !== undefined && entry[k] !== null ? entry[k] : '';
-      return `"${String(value).replace(/"/g, '""')}"`; // escape dấu "
-    });
-    csvRows.push(values.join(','));
-  });
-
-  const csvString = csvRows.join('\n');
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.setAttribute('download', 'suc_khoe.csv'); // tên file tiếng Việt
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  showLoading(false);
-});
-
-
-    // Xoá toàn bộ (lặp over docs)
-    document.getElementById('clearBtn').addEventListener('click', async () => {
-      showLoading(true);
-      try {
-        const col = collection(db, getCollectionPath());
-        const snap = await getDocs(col);
-        const deletes = [];
-        // use modular deleteDoc+doc
-        const { doc, deleteDoc: del } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then(m => ({ doc: m.doc, deleteDoc: m.deleteDoc }));
-        snap.forEach(d => {
-          deletes.push(del(doc(db, getCollectionPath(), d.id)));
+    // Xuất CSV (header tiếng Việt)
+    exportBtn.addEventListener('click', () => {
+        const user = auth.currentUser;
+        if (!user) {
+            showModal("Bạn cần đăng nhập để xuất dữ liệu.");
+            return;
+        }
+        showLoading(true);
+        const headersMap = {
+            date: "Ngày",
+            weight: "Cân nặng (kg)",
+            bp_s: "Huyết áp (tâm thu)",
+            bp_d: "Huyết áp (tâm trương)",
+            hr: "Nhịp tim (bpm)",
+            sleep: "Giấc ngủ (giờ)",
+            steps: "Bước chân",
+            notes: "Ghi chú"
+        };
+        const keys = Object.keys(headersMap);
+        const csvRows = [];
+        csvRows.push(keys.map(k => `"${headersMap[k]}"`).join(','));
+        data.forEach(entry => {
+            const values = keys.map(k => {
+                const value = entry[k] !== undefined && entry[k] !== null ? entry[k] : '';
+                return `"${String(value).replace(/"/g, '""')}"`;
+            });
+            csvRows.push(values.join(','));
         });
-        await Promise.all(deletes);
-        showModal("Đã xóa tất cả dữ liệu thành công!");
-      } catch (error) {
-        console.error("Lỗi khi xóa tất cả dữ liệu: ", error);
-        showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
-      } finally {
+        const csvString = csvRows.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', 'suc_khoe.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         showLoading(false);
-      }
+    });
+
+    // Xoá toàn bộ
+    clearBtn.addEventListener('click', async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            showModal("Bạn cần đăng nhập để xóa dữ liệu.");
+            return;
+        }
+        showLoading(true);
+        try {
+            const col = collection(db, getCollectionPath(user.uid));
+            const snap = await getDocs(col);
+            const deletes = [];
+            snap.forEach(d => {
+                deletes.push(deleteDoc(doc(db, getCollectionPath(user.uid), d.id)));
+            });
+            await Promise.all(deletes);
+            showModal("Đã xóa tất cả dữ liệu thành công!");
+        } catch (error) {
+            console.error("Lỗi khi xóa tất cả dữ liệu: ", error);
+            showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
+        } finally {
+            showLoading(false);
+        }
     });
 
     // Nhập CSV
-    document.getElementById('importFile').addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        showLoading(true);
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const text = e.target.result;
-          const rows = text.split('\n').map(row => row.trim()).filter(row => row.length > 0);
-          if (rows.length > 1) {
-            const headers = rows[0].split(',').map(h => JSON.parse(h));
-            const importPromises = [];
-            for (let i = 1; i < rows.length; i++) {
-              const rowValues = rows[i].split(',').map(v => {
-                try { return JSON.parse(v); } catch { return v; }
-              });
-              const newEntry = {};
-              headers.forEach((header, index) => {
-                newEntry[header] = rowValues[index] || null;
-              });
-              importPromises.push(addDoc(collection(db, getCollectionPath()), newEntry));
-            }
-            try {
-              await Promise.all(importPromises);
-              showModal("Dữ liệu đã được nhập thành công!");
-            } catch (error) {
-              console.error("Lỗi khi nhập dữ liệu: ", error);
-              showModal("Lỗi khi nhập dữ liệu. Vui lòng thử lại.");
-            }
-          }
-          showLoading(false);
-        };
-        reader.readAsText(file);
-      }
+    importFile.addEventListener('change', (event) => {
+        const user = auth.currentUser;
+        if (!user) {
+            showModal("Bạn cần đăng nhập để nhập dữ liệu.");
+            return;
+        }
+        const file = event.target.files[0];
+        if (file) {
+            showLoading(true);
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const text = e.target.result;
+                const rows = text.split('\n').map(row => row.trim()).filter(row => row.length > 0);
+                if (rows.length > 1) {
+                    const headers = rows[0].split(',').map(h => h.replace(/"/g, ''));
+                    const headersMap = {
+                      "Ngày": "date", "Cân nặng (kg)": "weight", "Huyết áp (tâm thu)": "bp_s",
+                      "Huyết áp (tâm trương)": "bp_d", "Nhịp tim (bpm)": "hr",
+                      "Giấc ngủ (giờ)": "sleep", "Bước chân": "steps", "Ghi chú": "notes"
+                    };
+                    const importPromises = [];
+                    for (let i = 1; i < rows.length; i++) {
+                        const rowValues = rows[i].split(',').map(v => v.replace(/"/g, ''));
+                        const newEntry = {};
+                        headers.forEach((header, index) => {
+                            const key = headersMap[header.trim()];
+                            if (key) {
+                                let value = rowValues[index] || null;
+                                // Convert to correct data types
+                                if (['weight', 'sleep'].includes(key) && value) value = parseFloat(value);
+                                else if (['bp_s', 'bp_d', 'hr', 'steps'].includes(key) && value) value = parseInt(value);
+                                newEntry[key] = value;
+                            }
+                        });
+                        importPromises.push(addDoc(collection(db, getCollectionPath(user.uid)), newEntry));
+                    }
+                    try {
+                        await Promise.all(importPromises);
+                        showModal("Dữ liệu đã được nhập thành công!");
+                    } catch (error) {
+                        console.error("Lỗi khi nhập dữ liệu: ", error);
+                        showModal("Lỗi khi nhập dữ liệu. Vui lòng thử lại.");
+                    }
+                }
+                showLoading(false);
+            };
+            reader.readAsText(file);
+        }
     });
-
-    // Start listener on load
-    startFirestoreListener();
   </script>
 </body>
 </html>
