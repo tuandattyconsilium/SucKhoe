@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Theo dõi sức khỏe — Daily Health Tracker</title>
+  <style>
+    :root{--accent:#0b8f6e;--muted:#666}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;margin:0;padding:16px;background:#f6fbf8;color:#0b2b20}
+    .wrap{max-width:980px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    h1{font-size:20px;margin:0}
+    .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(12,30,20,0.06);margin-top:14px}
+    form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="number"], input[type="text"], input[type="date"], textarea, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6efe9;font-size:14px}
+    textarea{min-height:60px}
+    .row{display:flex;gap:8px}
+    button{background:var(--accent);color:#fff;border:0;padding:10px 12px;border-radius:10px;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(11,143,110,0.14)}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px 10px;border-bottom:1px solid #f0f3f1;font-size:13px;text-align:left}
+    .small{font-size:12px;color:var(--muted)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .chart-wrap{height:220px;margin-top:12px;background:#fff;border-radius:10px;padding:10px}
+    #loading {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        border-radius: 10px;
+        display: none;
+        z-index: 1000;
+    }
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    @media (max-width:520px){header{flex-direction:column;align-items:flex-start} .chart-wrap{height:200px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Theo dõi & chăm sóc sức khoẻ hằng ngày</h1>
+        <p class="small">Ghi lại nhanh các chỉ số: cân nặng, huyết áp, nhịp tim, giấc ngủ, bước chân.</p>
+      </div>
+      <div class="controls">
+        <button id="exportBtn">Xuất CSV</button>
+        <button id="clearBtn" class="ghost">Xoá toàn bộ</button>
+        <label for="importFile" class="ghost" style="padding:8px 12px;border-radius:10px;cursor:pointer">Nhập CSV
+          <input id="importFile" type="file" accept="text/csv" style="display:none">
+        </label>
+      </div>
+    </header>
+
+    <section class="card">
+      <form id="entryForm" class="grid" autocomplete="off">
+        <div>
+          <label>Ngày</label>
+          <input type="date" id="date" required>
+        </div>
+        <div>
+          <label>Cân nặng (kg)</label>
+          <input type="number" step="0.1" id="weight" placeholder="ví dụ 68.5">
+        </div>
+        <div>
+          <label>Huyết áp (tâm thu / tâm trương)</label>
+          <div class="row">
+            <input type="number" id="bp_s" placeholder="120">
+            <input type="number" id="bp_d" placeholder="80">
+          </div>
+        </div>
+        <div>
+          <label>Nhịp tim (bpm)</label>
+          <input type="number" id="hr" placeholder="70">
+        </div>
+        <div>
+          <label>Giấc ngủ (giờ)</label>
+          <input type="number" step="0.1" id="sleep" placeholder="7.5">
+        </div>
+        <div>
+          <label>Bước chân</label>
+          <input type="number" id="steps" placeholder="5000">
+        </div>
+        <div style="grid-column:1/-1">
+          <label>Ghi chú</label>
+          <textarea id="notes" placeholder="Cảm giác, thuốc đã dùng, tập luyện..."></textarea>
+        </div>
+
+        <div style="grid-column:1/-1;text-align:right">
+          <button type="submit">Lưu</button>
+        </div>
+      </form>
+    </section>
+    
+    <div class="modal" id="myModal">
+      <div class="modal-content">
+        <p id="modalMessage"></p>
+        <button id="modalOkBtn">Đóng</button>
+      </div>
+    </div>
+    <div id="loading" style="display: none;">Đang xử lý...</div>
+
+    <section class="card">
+      <h3 style="margin:0 0 8px 0">Lịch sử</h3>
+      <div style="overflow:auto;max-height:400px">
+        <table id="healthTable">
+          <thead>
+            <tr>
+              <th>Ngày</th>
+              <th>Cân nặng</th>
+              <th>Huyết áp</th>
+              <th>Nhịp tim</th>
+              <th>Giấc ngủ</th>
+              <th>Bước chân</th>
+              <th>Ghi chú</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <section class="card">
+        <h3 style="margin:0 0 8px 0">Biểu đồ</h3>
+        <div class="chart-wrap">
+            <canvas id="healthChart"></canvas>
+        </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="module">
+    // Firebase: chỉ dùng App + Firestore (KHÔNG dùng Auth / UID)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    setLogLevel('Debug');
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDGJOZMUz2ITGwsXMQAeGU2KeZi0njShvg",
+      authDomain: "suckhoeuutienso1.firebaseapp.com",
+      projectId: "suckhoeuutienso1",
+      storageBucket: "suckhoeuutienso1.firebasestorage.app",
+      messagingSenderId: "838493203134",
+      appId: "1:838493203134:web:4064d659ea5409ae780cef",
+      measurementId: "G-G51BKKHGL3"
+    };
+
+    // Khởi tạo
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // --- Globals ---
+    let data = [];
+    let myChart = null;
+
+    const entryForm = document.getElementById('entryForm');
+    const healthTableBody = document.querySelector('#healthTable tbody');
+    const loadingIndicator = document.getElementById('loading');
+    const modal = document.getElementById('myModal');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalOkBtn = document.getElementById('modalOkBtn');
+    const saveButton = entryForm.querySelector('button[type="submit"]');
+
+    function showModal(message) {
+      modalMessage.textContent = message;
+      modal.style.display = 'flex';
+    }
+    modalOkBtn.onclick = () => { modal.style.display = 'none'; };
+
+    function showLoading(show) {
+      loadingIndicator.style.display = show ? 'block' : 'none';
+      saveButton.disabled = show;
+    }
+
+    // Collection path cố định (không dùng UID)
+    function getCollectionPath() {
+      return 'health_entries';
+    }
+
+    // Lắng nghe realtime (query theo date nếu có)
+    function startFirestoreListener() {
+      const colRef = collection(db, getCollectionPath());
+      const q = query(colRef, orderBy('date'));
+      onSnapshot(q, (snapshot) => {
+        showLoading(true);
+        const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        data = docs.sort((a, b) => new Date(a.date) - new Date(b.date));
+        renderTable();
+        renderChart();
+        showLoading(false);
+      }, (error) => {
+        console.error("Lỗi khi lắng nghe Firestore: ", error);
+        showModal("Có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại.");
+        showLoading(false);
+      });
+    }
+
+    // Render bảng
+    function renderTable() {
+      healthTableBody.innerHTML = '';
+      if (data.length === 0) {
+        healthTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Chưa có dữ liệu nào được lưu.</td></tr>';
+        return;
+      }
+      data.forEach(entry => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${entry.date}</td>
+          <td>${entry.weight || '-'} kg</td>
+          <td>${entry.bp_s || '-'}/${entry.bp_d || '-'}</td>
+          <td>${entry.hr || '-'} bpm</td>
+          <td>${entry.sleep || '-'} giờ</td>
+          <td>${entry.steps || '-'}</td>
+          <td>${entry.notes || '-'}</td>
+          <td>
+            <button class="ghost delete-btn" data-id="${entry.id}">Xóa</button>
+          </td>
+        `;
+        healthTableBody.appendChild(row);
+      });
+
+      document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', handleDelete);
+      });
+    }
+
+    // Render chart (giữ nhiều dataset như gốc)
+    function renderChart() {
+      const dates = data.map(entry => entry.date);
+      const weights = data.map(entry => entry.weight);
+      const bp_s = data.map(entry => entry.bp_s);
+      const bp_d = data.map(entry => entry.bp_d);
+      const hrs = data.map(entry => entry.hr);
+      const sleep = data.map(entry => entry.sleep);
+      const steps = data.map(entry => entry.steps);
+
+      const ctx = document.getElementById('healthChart').getContext('2d');
+      if (myChart) {
+        myChart.destroy();
+      }
+      myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets: [{
+            label: 'Cân nặng (kg)',
+            data: weights,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            fill: false,
+            tension: 0.1
+          }, {
+            label: 'Huyết áp Tâm thu',
+            data: bp_s,
+            borderColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            fill: false,
+            tension: 0.1
+          }, {
+            label: 'Huyết áp Tâm trương',
+            data: bp_d,
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            fill: false,
+            tension: 0.1
+          }, {
+            label: 'Nhịp tim (bpm)',
+            data: hrs,
+            borderColor: 'rgba(153, 102, 255, 1)',
+            backgroundColor: 'rgba(153, 102, 255, 0.2)',
+            fill: false,
+            tension: 0.1
+          }, {
+            label: 'Giấc ngủ (giờ)',
+            data: sleep,
+            borderColor: 'rgba(255, 159, 64, 1)',
+            backgroundColor: 'rgba(255, 159, 64, 0.2)',
+            fill: false,
+            tension: 0.1
+          }, {
+            label: 'Bước chân',
+            data: steps,
+            borderColor: 'rgba(255, 205, 86, 1)',
+            backgroundColor: 'rgba(255, 205, 86, 0.2)',
+            fill: false,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Ngày'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Giá trị'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Submit form: lưu vào collection 'health_entries'
+    entryForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading(true);
+      const entry = {
+        date: document.getElementById('date').value,
+        weight: parseFloat(document.getElementById('weight').value) || null,
+        bp_s: parseInt(document.getElementById('bp_s').value) || null,
+        bp_d: parseInt(document.getElementById('bp_d').value) || null,
+        hr: parseInt(document.getElementById('hr').value) || null,
+        sleep: parseFloat(document.getElementById('sleep').value) || null,
+        steps: parseInt(document.getElementById('steps').value) || null,
+        notes: document.getElementById('notes').value || null,
+        timestamp: new Date()
+      };
+
+      try {
+        await addDoc(collection(db, getCollectionPath()), entry);
+        showModal("Dữ liệu đã được lưu thành công!");
+        entryForm.reset();
+      } catch (error) {
+        console.error("Lỗi khi thêm tài liệu: ", error);
+        showModal("Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
+      } finally {
+        showLoading(false);
+      }
+    });
+
+    // Xóa 1 document
+    async function handleDelete(e) {
+      showLoading(true);
+      const docId = e.target.getAttribute('data-id');
+      if (!docId) {
+        showLoading(false);
+        return;
+      }
+      try {
+        await deleteDoc(collection(db, getCollectionPath()).doc ? collection(db, getCollectionPath()).doc(docId) : (async () => { /* fallback */ })());
+        // fallback: Firestore modular doesn't attach .doc on collection() — use doc() helper instead
+      } catch (err) {
+        // We'll perform delete correctly using doc() from modular API
+        try {
+          // dynamic import of doc and deleteDoc to ensure correct usage
+          const { doc, deleteDoc: del } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then(m => ({ doc: m.doc, deleteDoc: m.deleteDoc }));
+          await del(doc(db, getCollectionPath(), docId));
+          showModal("Dữ liệu đã được xóa thành công!");
+        } catch (error) {
+          console.error("Lỗi khi xóa tài liệu: ", error);
+          showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
+        }
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // Xuất CSV
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      showLoading(true);
+      const headers = ["date", "weight", "bp_s", "bp_d", "hr", "sleep", "steps", "notes"];
+      const csvRows = [];
+      csvRows.push(headers.join(','));
+      data.forEach(entry => {
+        const values = headers.map(header => {
+          const value = entry[header] !== undefined && entry[header] !== null ? entry[header] : '';
+          return JSON.stringify(value);
+        });
+        csvRows.push(values.join(','));
+      });
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', 'health_data.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showLoading(false);
+    });
+
+    // Xoá toàn bộ (lặp over docs)
+    document.getElementById('clearBtn').addEventListener('click', async () => {
+      showLoading(true);
+      try {
+        const col = collection(db, getCollectionPath());
+        const snap = await getDocs(col);
+        const deletes = [];
+        // use modular deleteDoc+doc
+        const { doc, deleteDoc: del } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then(m => ({ doc: m.doc, deleteDoc: m.deleteDoc }));
+        snap.forEach(d => {
+          deletes.push(del(doc(db, getCollectionPath(), d.id)));
+        });
+        await Promise.all(deletes);
+        showModal("Đã xóa tất cả dữ liệu thành công!");
+      } catch (error) {
+        console.error("Lỗi khi xóa tất cả dữ liệu: ", error);
+        showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
+      } finally {
+        showLoading(false);
+      }
+    });
+
+    // Nhập CSV
+    document.getElementById('importFile').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        showLoading(true);
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const text = e.target.result;
+          const rows = text.split('\n').map(row => row.trim()).filter(row => row.length > 0);
+          if (rows.length > 1) {
+            const headers = rows[0].split(',').map(h => JSON.parse(h));
+            const importPromises = [];
+            for (let i = 1; i < rows.length; i++) {
+              const rowValues = rows[i].split(',').map(v => {
+                try { return JSON.parse(v); } catch { return v; }
+              });
+              const newEntry = {};
+              headers.forEach((header, index) => {
+                newEntry[header] = rowValues[index] || null;
+              });
+              importPromises.push(addDoc(collection(db, getCollectionPath()), newEntry));
+            }
+            try {
+              await Promise.all(importPromises);
+              showModal("Dữ liệu đã được nhập thành công!");
+            } catch (error) {
+              console.error("Lỗi khi nhập dữ liệu: ", error);
+              showModal("Lỗi khi nhập dữ liệu. Vui lòng thử lại.");
+            }
+          }
+          showLoading(false);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Start listener on load
+    startFirestoreListener();
+  </script>
+</body>
+</html>
