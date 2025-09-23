@@ -127,8 +127,12 @@
       <div>
         <h1>Theo dõi & chăm sóc sức khoẻ hằng ngày</h1>
         <p class="small">Ghi lại nhanh các chỉ số: cân nặng, huyết áp, nhịp tim, giấc ngủ, bước chân.</p>
-        <p class="small">Họ và tên: <b id="user-name">N/A</b> | Tuổi: <b id="user-age">N/A</b> | Nơi ở: <b id="user-location">N/A</b></p>
-        <p class="small">ID người dùng: <b id="user-id-display"></b></p>
+        <div id="admin-view-controls" style="display: none; margin-top: 8px;">
+            <label for="user-select" class="small">Chọn người dùng để xem:</label>
+            <select id="user-select" style="width: auto; min-width: 200px;"></select>
+            <p class="small">Hồ sơ của: <b id="viewed-user-name">N/A</b> | Tuổi: <b id="viewed-user-age">N/A</b> | Nơi ở: <b id="viewed-user-location">N/A</b></p>
+        </div>
+        <p class="small">ID người dùng hiện tại: <b id="user-id-display"></b></p>
       </div>
       <div class="controls">
         <button id="addAccountBtn" style="display: none;">Thêm tài khoản</button>
@@ -305,6 +309,7 @@
     let data = [];
     let myChart = null;
     let isAdmin = false;
+    let currentAdminViewUid = null;
 
     // Elements
     const authContainer = document.getElementById('auth-container');
@@ -318,18 +323,21 @@
     const clearBtn = document.getElementById('clearBtn');
     const importFile = document.getElementById('importFile');
     const userDisplay = document.getElementById('user-id-display');
-    const userName = document.getElementById('user-name');
-    const userAge = document.getElementById('user-age');
-    const userLocation = document.getElementById('user-location');
-    const entryForm = document.getElementById('entryForm');
-    const profileForm = document.getElementById('profileForm');
     const profileFormCard = document.getElementById('profileFormCard');
+    const entryFormCard = document.getElementById('entryFormCard');
     const healthTableBody = document.querySelector('#healthTable tbody');
     const loadingIndicator = document.getElementById('loading');
     const modal = document.getElementById('myModal');
     const modalMessage = document.getElementById('modalMessage');
     const modalOkBtn = document.getElementById('modalOkBtn');
     const saveButton = entryForm.querySelector('button[type="submit"]');
+
+    // Admin-specific elements
+    const adminViewControls = document.getElementById('admin-view-controls');
+    const userSelect = document.getElementById('user-select');
+    const viewedUserName = document.getElementById('viewed-user-name');
+    const viewedUserAge = document.getElementById('viewed-user-age');
+    const viewedUserLocation = document.getElementById('viewed-user-location');
 
     // Modals
     const addAccountModal = document.getElementById('addAccountModal');
@@ -385,7 +393,6 @@
 
     // Lấy collection path dựa trên user ID
     function getCollectionPath(uid) {
-        if (!uid) return null;
         return `users/${uid}/health_entries`;
     }
 
@@ -398,57 +405,109 @@
             appContainer.style.display = 'block';
             userDisplay.textContent = user.uid;
             
-            // Lấy thông tin hồ sơ
-            const profileDoc = await getDoc(doc(db, "users", user.uid));
-            if (profileDoc.exists()) {
-                const profileData = profileDoc.data();
-                userName.textContent = profileData.name || "N/A";
-                userAge.textContent = profileData.age || "N/A";
-                userLocation.textContent = profileData.location || "N/A";
-                profileFormCard.style.display = 'none';
-            } else {
-                userName.textContent = "N/A";
-                userAge.textContent = "N/A";
-                userLocation.textContent = "N/A";
-                profileFormCard.style.display = 'block';
-            }
-
             // Kiểm tra role admin dựa trên email
-            if (user.email === 'admin@myapp.com') {
-                isAdmin = true;
-                addAccountBtn.style.display = 'block';
+            isAdmin = user.email === 'admin@myapp.com';
+            addAccountBtn.style.display = isAdmin ? 'block' : 'none';
+            adminViewControls.style.display = isAdmin ? 'block' : 'none';
+            entryFormCard.style.display = isAdmin ? 'none' : 'block';
+
+            if (isAdmin) {
+                await fetchAndPopulateUsers(user.uid);
             } else {
-                isAdmin = false;
-                addAccountBtn.style.display = 'none';
+                currentAdminViewUid = user.uid;
+                await updateProfileDisplay(currentAdminViewUid);
+                // Bắt đầu lắng nghe dữ liệu cho người dùng hiện tại
+                startFirestoreListener(getCollectionPath(currentAdminViewUid));
             }
 
-            // Bắt đầu lắng nghe dữ liệu cho người dùng hiện tại
-            startFirestoreListener(getCollectionPath(user.uid));
         } else {
             // Người dùng đã đăng xuất
             authContainer.style.display = 'flex';
             appContainer.style.display = 'none';
             userDisplay.textContent = 'N/A';
-            userName.textContent = 'N/A';
-            userAge.textContent = 'N/A';
-            userLocation.textContent = 'N/A';
+            viewedUserName.textContent = 'N/A';
+            viewedUserAge.textContent = 'N/A';
+            viewedUserLocation.textContent = 'N/A';
             data = [];
             renderTable();
             if (myChart) {
                 myChart.destroy();
                 myChart = null;
             }
+            currentAdminViewUid = null;
+            isAdmin = false;
         }
         showLoading(false);
     });
 
-    // Lưu hồ sơ
+    // Cập nhật thông tin hồ sơ được xem
+    async function updateProfileDisplay(uid) {
+        const profileDoc = await getDoc(doc(db, "users", uid));
+        if (profileDoc.exists()) {
+            const profileData = profileDoc.data();
+            viewedUserName.textContent = profileData.name || "N/A";
+            viewedUserAge.textContent = profileData.age || "N/A";
+            viewedUserLocation.textContent = profileData.location || "N/A";
+        } else {
+            viewedUserName.textContent = "N/A";
+            viewedUserAge.textContent = "N/A";
+            viewedUserLocation.textContent = "N/A";
+        }
+        // Admin chỉ xem, không chỉnh sửa hồ sơ người khác
+        profileFormCard.style.display = isAdmin ? 'none' : 'block';
+    }
+
+    // Lấy danh sách tất cả người dùng và điền vào dropdown (chỉ admin)
+    async function fetchAndPopulateUsers(adminUid) {
+        userSelect.innerHTML = '';
+        const usersRef = collection(db, "users");
+        const usersSnap = await getDocs(usersRef);
+        
+        let allUsers = [];
+        usersSnap.forEach(doc => {
+            allUsers.push({ id: doc.id, email: doc.data().email, name: doc.data().name });
+        });
+        
+        // Add all users to the dropdown
+        allUsers.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = user.name ? `${user.name} (${user.email || user.id})` : (user.email || user.id);
+            userSelect.appendChild(option);
+        });
+
+        // Add the admin's own account to the dropdown
+        const adminUserDoc = await getDoc(doc(db, 'users', adminUid));
+        const adminEmail = adminUserDoc.exists() ? adminUserDoc.data().email : 'admin@myapp.com';
+        const adminOption = document.createElement('option');
+        adminOption.value = adminUid;
+        adminOption.textContent = `Hồ sơ của tôi (${adminEmail})`;
+        userSelect.prepend(adminOption);
+
+        // Set the default selection to the admin's own UID
+        userSelect.value = adminUid;
+        currentAdminViewUid = adminUid;
+
+        // Start listening to the selected user's data
+        await updateProfileDisplay(currentAdminViewUid);
+        startFirestoreListener(getCollectionPath(currentAdminViewUid));
+
+        // Event listener for dropdown change
+        userSelect.addEventListener('change', (e) => {
+            currentAdminViewUid = e.target.value;
+            showLoading(true);
+            updateProfileDisplay(currentAdminViewUid);
+            startFirestoreListener(getCollectionPath(currentAdminViewUid));
+        });
+    }
+
+    // Lưu hồ sơ (chỉ cho người dùng thường)
     profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         showLoading(true);
         const user = auth.currentUser;
-        if (!user) {
-            showModal("Bạn cần đăng nhập để lưu dữ liệu.");
+        if (!user || isAdmin) { // Block admin from using this form
+            showModal("Bạn không có quyền lưu dữ liệu hồ sơ này.");
             showLoading(false);
             return;
         }
@@ -464,9 +523,6 @@
             await setDoc(doc(db, "users", user.uid), profile, { merge: true });
             showModal("Hồ sơ đã được lưu thành công!");
             profileFormCard.style.display = 'none';
-            userName.textContent = profile.name || "N/A";
-            userAge.textContent = profile.age || "N/A";
-            userLocation.textContent = profile.location || "N/A";
         } catch (error) {
             console.error("Lỗi khi lưu hồ sơ: ", error);
             showModal("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
@@ -477,6 +533,7 @@
 
     // Lắng nghe realtime từ Firestore
     function startFirestoreListener(collectionPath) {
+      if (!collectionPath) return;
       const colRef = collection(db, collectionPath);
       const q = query(colRef, orderBy('date'));
       onSnapshot(q, (snapshot) => {
@@ -612,7 +669,9 @@
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            // Lưu email vào profile
+            await setDoc(doc(db, "users", userCredential.user.uid), { email: email }, { merge: true });
             authErrorMsg.textContent = '';
         } catch (error) {
             console.error(error);
@@ -630,6 +689,8 @@
         const password = document.getElementById('newPassword').value;
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            // Lưu email vào profile của người dùng mới tạo
+            await setDoc(doc(db, "users", userCredential.user.uid), { email: email }, { merge: true });
             showModal(`Đã tạo tài khoản mới: ${email}`);
             addAccountModal.style.display = 'none';
             addAccountForm.reset();
@@ -714,13 +775,14 @@
     async function handleDelete(e) {
       showLoading(true);
       const docId = e.target.getAttribute('data-id');
-      const user = auth.currentUser;
-      if (!user || !docId) {
+      const userUid = auth.currentUser.uid;
+      const targetUid = isAdmin ? currentAdminViewUid : userUid;
+      if (!targetUid || !docId) {
           showLoading(false);
           return;
       }
       try {
-        await deleteDoc(doc(db, getCollectionPath(user.uid), docId));
+        await deleteDoc(doc(db, getCollectionPath(targetUid), docId));
         showModal("Dữ liệu đã được xóa thành công!");
       } catch (error) {
         console.error("Lỗi khi xóa tài liệu: ", error);
@@ -732,8 +794,9 @@
 
     // Xuất CSV (header tiếng Việt)
     exportBtn.addEventListener('click', () => {
-        const user = auth.currentUser;
-        if (!user) {
+        const userUid = auth.currentUser.uid;
+        const targetUid = isAdmin ? currentAdminViewUid : userUid;
+        if (!targetUid) {
             showModal("Bạn cần đăng nhập để xuất dữ liệu.");
             return;
         }
@@ -771,18 +834,19 @@
 
     // Xoá toàn bộ
     clearBtn.addEventListener('click', async () => {
-        const user = auth.currentUser;
-        if (!user) {
+        const userUid = auth.currentUser.uid;
+        const targetUid = isAdmin ? currentAdminViewUid : userUid;
+        if (!targetUid) {
             showModal("Bạn cần đăng nhập để xóa dữ liệu.");
             return;
         }
         showLoading(true);
         try {
-            const col = collection(db, getCollectionPath(user.uid));
+            const col = collection(db, getCollectionPath(targetUid));
             const snap = await getDocs(col);
             const deletes = [];
             snap.forEach(d => {
-                deletes.push(deleteDoc(doc(db, getCollectionPath(user.uid), d.id)));
+                deletes.push(deleteDoc(doc(db, getCollectionPath(targetUid), d.id)));
             });
             await Promise.all(deletes);
             showModal("Đã xóa tất cả dữ liệu thành công!");
@@ -796,8 +860,9 @@
 
     // Nhập CSV
     importFile.addEventListener('change', (event) => {
-        const user = auth.currentUser;
-        if (!user) {
+        const userUid = auth.currentUser.uid;
+        const targetUid = isAdmin ? currentAdminViewUid : userUid;
+        if (!targetUid) {
             showModal("Bạn cần đăng nhập để nhập dữ liệu.");
             return;
         }
@@ -829,7 +894,7 @@
                                 newEntry[key] = value;
                             }
                         });
-                        importPromises.push(addDoc(collection(db, getCollectionPath(user.uid)), newEntry));
+                        importPromises.push(addDoc(collection(db, getCollectionPath(targetUid)), newEntry));
                     }
                     try {
                         await Promise.all(importPromises);
