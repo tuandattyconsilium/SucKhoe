@@ -1,914 +1,928 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Theo dõi sức khỏe — Daily Health Tracker</title>
-  <style>
-    :root{--accent:#0b8f6e;--muted:#666;--danger:#dc2626}
-    *{box-sizing:border-box}
-    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;margin:0;padding:16px;background:#f6fbf8;color:#0b2b20}
-    .wrap{max-width:980px;margin:0 auto}
-    header{display:flex;align-items:center;justify-content:space-between;gap:16px}
-    h1{font-size:20px;margin:0}
-    .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(12,30,20,0.06);margin-top:14px}
-    form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
-    input[type="number"], input[type="text"], input[type="date"], input[type="password"], textarea, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6efe9;font-size:14px}
-    textarea{min-height:60px}
-    .row{display:flex;gap:8px}
-    button{background:var(--accent);color:#fff;border:0;padding:10px 12px;border-radius:10px;cursor:pointer;transition:background-color 0.2s}
-    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(11,143,110,0.14)}
-    button.danger{background:var(--danger)}
-    button:hover{filter:brightness(1.1)}
-    table{width:100%;border-collapse:collapse;margin-top:12px}
-    th,td{padding:8px 10px;border-bottom:1px solid #f0f3f1;font-size:13px;text-align:left}
-    .small{font-size:12px;color:var(--muted)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    .chart-wrap{height:220px;margin-top:12px;background:#fff;border-radius:10px;padding:10px}
-    #loading {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        padding: 20px;
-        background: rgba(0,0,0,0.7);
-        color: white;
-        border-radius: 10px;
-        display: none;
-        z-index: 1000;
-        text-align: center;
-    }
-    .modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 1001;
-    }
-    .modal-content {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-    }
-    #auth-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        height: 80vh;
-        gap: 16px;
-    }
-    .tab-container {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 12px;
-      border-bottom: 1px solid #e6efe9;
-    }
-    .tab {
-      padding: 10px 20px;
-      cursor: pointer;
-      border: none;
-      background: transparent;
-      font-size: 16px;
-      color: var(--muted);
-      border-bottom: 2px solid transparent;
-      transition: color 0.2s, border-bottom-color 0.2s;
-    }
-    .tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-    }
-    .form-section {
-      display: none;
-    }
-    .form-section.active {
-      display: block;
-    }
-    .alert-message {
-      color: var(--danger);
-      font-size: 14px;
-      margin-top: 10px;
-    }
-    @media (max-width:520px){header{flex-direction:column;align-items:flex-start} .chart-wrap{height:200px}}
-  </style>
-</head>
-<body>
-  
-  <!-- Container Đăng nhập -->
-  <div id="auth-container">
-    <div class="card" style="width: 100%; max-width: 400px; padding: 20px">
-        <h2 style="margin: 0; text-align: center;">Đăng nhập</h2>
-        <div class="form-section active" id="loginFormSection">
-            <form id="loginForm">
-                <label>Email</label>
-                <input type="email" id="loginEmail" required>
-                <div style="height: 12px;"></div>
-                <label>Mật khẩu</label>
-                <input type="password" id="loginPassword" required>
-                <div style="height: 16px;"></div>
-                <button type="submit" style="width: 100%">Đăng nhập</button>
-            </form>
-        </div>
-        <p class="alert-message" id="authErrorMsg"></p>
-    </div>
-  </div>
-
-  <!-- Container Ứng dụng chính -->
-  <div class="wrap" id="app-container" style="display: none;">
-    <header>
-      <div>
-        <h1>Theo dõi & chăm sóc sức khoẻ hằng ngày</h1>
-        <p class="small">Ghi lại nhanh các chỉ số: cân nặng, huyết áp, nhịp tim, giấc ngủ, bước chân.</p>
-        <div id="admin-view-controls" style="display: none; margin-top: 8px;">
-            <label for="user-select" class="small">Chọn người dùng để xem:</label>
-            <select id="user-select" style="width: auto; min-width: 200px;"></select>
-            <p class="small">Hồ sơ của: <b id="viewed-user-name">N/A</b> | Tuổi: <b id="viewed-user-age">N/A</b> | Nơi ở: <b id="viewed-user-location">N/A</b></p>
-        </div>
-        <p class="small">ID người dùng hiện tại: <b id="user-id-display"></b></p>
-      </div>
-      <div class="controls">
-        <button id="addAccountBtn" style="display: none;">Thêm tài khoản</button>
-        <button id="changePasswordBtn">Đổi mật khẩu</button>
-        <button id="exportBtn">Xuất CSV</button>
-        <button id="clearBtn" class="ghost">Xoá toàn bộ</button>
-        <label for="importFile" class="ghost" style="padding:8px 12px;border-radius:10px;cursor:pointer">Nhập CSV
-          <input id="importFile" type="file" accept="text/csv" style="display:none">
-        </label>
-        <button id="logoutBtn" class="danger">Đăng xuất</button>
-      </div>
-    </header>
-    
-    <section class="card" id="profileFormCard" style="display: none;">
-        <h3 style="margin-top:0">Cập nhật hồ sơ</h3>
-        <form id="profileForm" class="grid" autocomplete="off">
-            <div>
-                <label>Họ và tên</label>
-                <input type="text" id="name" placeholder="Họ và tên">
-            </div>
-            <div>
-                <label>Tuổi</label>
-                <input type="number" id="age" placeholder="Tuổi">
-            </div>
-            <div>
-                <label>Nơi ở</label>
-                <input type="text" id="location" placeholder="Tỉnh/Thành phố">
-            </div>
-            <div style="grid-column:1/-1;text-align:right">
-                <button type="submit">Lưu hồ sơ</button>
-            </div>
-        </form>
-    </section>
-
-    <section class="card" id="entryFormCard">
-      <form id="entryForm" class="grid" autocomplete="off">
-        <div>
-          <label>Ngày</label>
-          <input type="date" id="date" required>
-        </div>
-        <div>
-          <label>Cân nặng (kg)</label>
-          <input type="number" step="0.1" id="weight" placeholder="ví dụ 68.5">
-        </div>
-        <div>
-          <label>Huyết áp (tâm thu / tâm trương)</label>
-          <div class="row">
-            <input type="number" id="bp_s" placeholder="120">
-            <input type="number" id="bp_d" placeholder="80">
-          </div>
-        </div>
-        <div>
-          <label>Nhịp tim (bpm)</label>
-          <input type="number" id="hr" placeholder="70">
-        </div>
-        <div>
-          <label>Giấc ngủ (giờ)</label>
-          <input type="number" step="0.1" id="sleep" placeholder="7.5">
-        </div>
-        <div>
-          <label>Bước chân</label>
-          <input type="number" id="steps" placeholder="5000">
-        </div>
-        <div style="grid-column:1/-1">
-          <label>Ghi chú</label>
-          <textarea id="notes" placeholder="Cảm giác, thuốc đã dùng, tập luyện..."></textarea>
-        </div>
-
-        <div style="grid-column:1/-1;text-align:right">
-          <button type="submit">Lưu</button>
-        </div>
-      </form>
-    </section>
-    
-    <div class="modal" id="myModal">
-      <div class="modal-content">
-        <p id="modalMessage"></p>
-        <div style="height: 10px;"></div>
-        <button id="modalOkBtn">Đóng</button>
-      </div>
-    </div>
-    
-    <div class="modal" id="addAccountModal">
-        <div class="modal-content">
-            <h3 style="margin-top:0">Thêm tài khoản mới</h3>
-            <form id="addAccountForm">
-                <label>Email</label>
-                <input type="email" id="newEmail" required>
-                <div style="height: 12px;"></div>
-                <label>Mật khẩu</label>
-                <input type="password" id="newPassword" required>
-                <div style="height: 12px;"></div>
-                <button type="submit">Tạo tài khoản</button>
-                <p class="alert-message" id="addAccountErrorMsg"></p>
-            </form>
-            <div style="height: 10px;"></div>
-            <button id="closeAddAccountModal" class="ghost">Đóng</button>
-        </div>
-    </div>
-    
-    <div class="modal" id="changePasswordModal">
-        <div class="modal-content">
-            <h3 style="margin-top:0">Đổi mật khẩu</h3>
-            <form id="changePasswordForm">
-                <label>Mật khẩu mới</label>
-                <input type="password" id="newPassword" required>
-                <div style="height: 12px;"></div>
-                <button type="submit">Đổi mật khẩu</button>
-                <p class="alert-message" id="changePasswordErrorMsg"></p>
-            </form>
-            <div style="height: 10px;"></div>
-            <button id="closeChangePasswordModal" class="ghost">Đóng</button>
-        </div>
-    </div>
-
-    <div id="loading" style="display: none;">Đang xử lý...</div>
-
-    <section class="card" id="historyCard">
-      <h3 style="margin:0 0 8px 0">Lịch sử</h3>
-      <div style="overflow:auto;max-height:400px">
-        <table id="healthTable">
-          <thead>
-            <tr>
-              <th>Ngày</th>
-              <th>Cân nặng</th>
-              <th>Huyết áp</th>
-              <th>Nhịp tim</th>
-              <th>Giấc ngủ</th>
-              <th>Bước chân</th>
-              <th>Ghi chú</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
-      </div>
-    </section>
-    
-    <section class="card" id="chartCard">
-        <h3 style="margin:0 0 8px 0">Biểu đồ</h3>
-        <div class="chart-wrap">
-            <canvas id="healthChart"></canvas>
-        </div>
-    </section>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script type="module">
-    // Firebase: Thêm các module Auth cần thiết
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, getDocs, query, orderBy, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    setLogLevel('Debug');
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyDGJOZMUz2ITGwsXMQAeGU2KeZi0njShvg",
-      authDomain: "suckhoeuutienso1.firebaseapp.com",
-      projectId: "suckhoeuutienso1",
-      storageBucket: "suckhoeuutienso1.firebasestorage.app",
-      messagingSenderId: "838493203134",
-      appId: "1:838493203134:web:4064d659ea5409ae780cef",
-      measurementId: "G-G51BKKHGL3"
-    };
-
-    // Khởi tạo Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-
-    // Globals
-    let data = [];
-    let myChart = null;
-    let isAdmin = false;
-    let currentAdminViewUid = null;
-
-    // Elements
-    const authContainer = document.getElementById('auth-container');
-    const appContainer = document.getElementById('app-container');
-    const loginForm = document.getElementById('loginForm');
-    const authErrorMsg = document.getElementById('authErrorMsg');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const changePasswordBtn = document.getElementById('changePasswordBtn');
-    const addAccountBtn = document.getElementById('addAccountBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const importFile = document.getElementById('importFile');
-    const userDisplay = document.getElementById('user-id-display');
-    const profileFormCard = document.getElementById('profileFormCard');
-    const entryFormCard = document.getElementById('entryFormCard');
-    const healthTableBody = document.querySelector('#healthTable tbody');
-    const loadingIndicator = document.getElementById('loading');
-    const modal = document.getElementById('myModal');
-    const modalMessage = document.getElementById('modalMessage');
-    const modalOkBtn = document.getElementById('modalOkBtn');
-    const saveButton = entryForm.querySelector('button[type="submit"]');
-
-    // Admin-specific elements
-    const adminViewControls = document.getElementById('admin-view-controls');
-    const userSelect = document.getElementById('user-select');
-    const viewedUserName = document.getElementById('viewed-user-name');
-    const viewedUserAge = document.getElementById('viewed-user-age');
-    const viewedUserLocation = document.getElementById('viewed-user-location');
-
-    // Modals
-    const addAccountModal = document.getElementById('addAccountModal');
-    const addAccountForm = document.getElementById('addAccountForm');
-    const addAccountErrorMsg = document.getElementById('addAccountErrorMsg');
-    const closeAddAccountModal = document.getElementById('closeAddAccountModal');
-    
-    const changePasswordModal = document.getElementById('changePasswordModal');
-    const changePasswordForm = document.getElementById('changePasswordForm');
-    const changePasswordErrorMsg = document.getElementById('changePasswordErrorMsg');
-    const closeChangePasswordModal = document.getElementById('closeChangePasswordModal');
-
-    // Hàm hiển thị modal thông báo
-    function showModal(message) {
-      modalMessage.textContent = message;
-      modal.style.display = 'flex';
-    }
-    modalOkBtn.onclick = () => { modal.style.display = 'none'; };
-
-    // Hàm hiển thị modal thêm tài khoản
-    addAccountBtn.addEventListener('click', () => {
-        addAccountModal.style.display = 'flex';
-        addAccountErrorMsg.textContent = '';
-    });
-    closeAddAccountModal.addEventListener('click', () => {
-        addAccountModal.style.display = 'none';
-        addAccountForm.reset();
-    });
-    
-    // Hàm hiển thị modal đổi mật khẩu
-    changePasswordBtn.addEventListener('click', () => {
-        changePasswordModal.style.display = 'flex';
-        changePasswordErrorMsg.textContent = '';
-    });
-    closeChangePasswordModal.addEventListener('click', () => {
-        changePasswordModal.style.display = 'none';
-        changePasswordForm.reset();
-    });
-
-    // Hàm hiển thị loading
-    function showLoading(show) {
-      loadingIndicator.style.display = show ? 'block' : 'none';
-      saveButton.disabled = show;
-      logoutBtn.disabled = show;
-      exportBtn.disabled = show;
-      clearBtn.disabled = show;
-      importFile.disabled = show;
-      changePasswordBtn.disabled = show;
-      if (isAdmin) {
-          addAccountBtn.disabled = show;
-      }
-    }
-
-    // Lấy collection path dựa trên user ID
-    function getCollectionPath(uid) {
-        return `users/${uid}/health_entries`;
-    }
-
-    // Lắng nghe trạng thái xác thực
-    onAuthStateChanged(auth, async (user) => {
-        showLoading(true);
-        if (user) {
-            // Người dùng đã đăng nhập
-            authContainer.style.display = 'none';
-            appContainer.style.display = 'block';
-            userDisplay.textContent = user.uid;
-            
-            // Kiểm tra role admin dựa trên email
-            isAdmin = user.email === 'admin@myapp.com';
-            addAccountBtn.style.display = isAdmin ? 'block' : 'none';
-            adminViewControls.style.display = isAdmin ? 'block' : 'none';
-            entryFormCard.style.display = isAdmin ? 'none' : 'block';
-
-            if (isAdmin) {
-                await fetchAndPopulateUsers(user.uid);
-            } else {
-                currentAdminViewUid = user.uid;
-                await updateProfileDisplay(currentAdminViewUid);
-                // Bắt đầu lắng nghe dữ liệu cho người dùng hiện tại
-                startFirestoreListener(getCollectionPath(currentAdminViewUid));
-            }
-
-        } else {
-            // Người dùng đã đăng xuất
-            authContainer.style.display = 'flex';
-            appContainer.style.display = 'none';
-            userDisplay.textContent = 'N/A';
-            viewedUserName.textContent = 'N/A';
-            viewedUserAge.textContent = 'N/A';
-            viewedUserLocation.textContent = 'N/A';
-            data = [];
-            renderTable();
-            if (myChart) {
-                myChart.destroy();
-                myChart = null;
-            }
-            currentAdminViewUid = null;
-            isAdmin = false;
-        }
-        showLoading(false);
-    });
-
-    // Cập nhật thông tin hồ sơ được xem
-    async function updateProfileDisplay(uid) {
-        const profileDoc = await getDoc(doc(db, "users", uid));
-        if (profileDoc.exists()) {
-            const profileData = profileDoc.data();
-            viewedUserName.textContent = profileData.name || "N/A";
-            viewedUserAge.textContent = profileData.age || "N/A";
-            viewedUserLocation.textContent = profileData.location || "N/A";
-        } else {
-            viewedUserName.textContent = "N/A";
-            viewedUserAge.textContent = "N/A";
-            viewedUserLocation.textContent = "N/A";
-        }
-        // Admin chỉ xem, không chỉnh sửa hồ sơ người khác
-        profileFormCard.style.display = isAdmin ? 'none' : 'block';
-    }
-
-    // Lấy danh sách tất cả người dùng và điền vào dropdown (chỉ admin)
-    async function fetchAndPopulateUsers(adminUid) {
-        userSelect.innerHTML = '';
-        const usersRef = collection(db, "users");
-        const usersSnap = await getDocs(usersRef);
-        
-        let allUsers = [];
-        usersSnap.forEach(doc => {
-            allUsers.push({ id: doc.id, email: doc.data().email, name: doc.data().name });
-        });
-        
-        // Add all users to the dropdown
-        allUsers.forEach(user => {
-            const option = document.createElement('option');
-            option.value = user.id;
-            option.textContent = user.name ? `${user.name} (${user.email || user.id})` : (user.email || user.id);
-            userSelect.appendChild(option);
-        });
-
-        // Add the admin's own account to the dropdown
-        const adminUserDoc = await getDoc(doc(db, 'users', adminUid));
-        const adminEmail = adminUserDoc.exists() ? adminUserDoc.data().email : 'admin@myapp.com';
-        const adminOption = document.createElement('option');
-        adminOption.value = adminUid;
-        adminOption.textContent = `Hồ sơ của tôi (${adminEmail})`;
-        userSelect.prepend(adminOption);
-
-        // Set the default selection to the admin's own UID
-        userSelect.value = adminUid;
-        currentAdminViewUid = adminUid;
-
-        // Start listening to the selected user's data
-        await updateProfileDisplay(currentAdminViewUid);
-        startFirestoreListener(getCollectionPath(currentAdminViewUid));
-
-        // Event listener for dropdown change
-        userSelect.addEventListener('change', (e) => {
-            currentAdminViewUid = e.target.value;
-            showLoading(true);
-            updateProfileDisplay(currentAdminViewUid);
-            startFirestoreListener(getCollectionPath(currentAdminViewUid));
-        });
-    }
-
-    // Lưu hồ sơ (chỉ cho người dùng thường)
-    profileForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        showLoading(true);
-        const user = auth.currentUser;
-        if (!user || isAdmin) { // Block admin from using this form
-            showModal("Bạn không có quyền lưu dữ liệu hồ sơ này.");
-            showLoading(false);
-            return;
-        }
-
-        const profile = {
-            name: document.getElementById('name').value,
-            age: document.getElementById('age').value,
-            location: document.getElementById('location').value,
-            timestamp: new Date()
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng Dụng Quản Lý Sức Khỏe</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Global variables for Firebase
+        let app, auth, db;
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLc2DYfVdxHdUDQhY9UrX0XlDuXH_NO7Q",
+            authDomain: "suckhoe-4777a.firebaseapp.com",
+            projectId: "suckhoe-4777a",
+            storageBucket: "suckhoe-4777a.firebasestorage.app",
+            messagingSenderId: "752106860226",
+            appId: "1:752106860226:web:a245b5daedab3b0aca155b",
+            measurementId: "G-38JCCTKRGM"
         };
+        
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithEmailAndPassword, 
+            signOut, 
+            onAuthStateChanged, 
+            updatePassword, 
+            createUserWithEmailAndPassword 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            doc, 
+            updateDoc, 
+            deleteDoc,
+            query,
+            where,
+            getDocs
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        try {
-            await setDoc(doc(db, "users", user.uid), profile, { merge: true });
-            showModal("Hồ sơ đã được lưu thành công!");
-            profileFormCard.style.display = 'none';
-        } catch (error) {
-            console.error("Lỗi khi lưu hồ sơ: ", error);
-            showModal("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
-        } finally {
-            showLoading(false);
+        // Initialize Firebase on window load
+        window.onload = () => {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            
+            // Listen to auth state changes
+            onAuthStateChanged(auth, handleAuthStateChange);
+        };
+        
+        // --- UI Elements ---
+        const loginForm = document.getElementById('login-form');
+        const mainContent = document.getElementById('main-content');
+        const mainHeader = document.getElementById('main-header'); // Thêm tham chiếu đến header
+        const loginErrorMsg = document.getElementById('login-error-msg');
+        const userEmailDisplay = document.getElementById('user-email-display');
+        const profileList = document.getElementById('profile-list');
+        const healthDataSection = document.getElementById('health-data-section');
+        const healthDataList = document.getElementById('health-data-list');
+        const healthDataForm = document.getElementById('health-data-form');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const chartsSection = document.getElementById('charts-section');
+
+        // All modals and dialogs
+        const messageBox = document.getElementById('message-box');
+        const changePasswordModal = document.getElementById('change-password-modal');
+        const addAccountModal = document.getElementById('add-account-modal');
+        const profileModal = document.getElementById('profile-modal');
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        let profileToDeleteId = null;
+        let currentProfileId = null;
+
+        // Chart instances
+        let bpChartInstance, heartRateChartInstance, sleepChartInstance, stepsChartInstance, weightChartInstance;
+
+        // --- Helper Functions ---
+        function showLoading(show = true) {
+            loadingIndicator.classList.toggle('hidden', !show);
         }
-    });
 
-    // Lắng nghe realtime từ Firestore
-    function startFirestoreListener(collectionPath) {
-      if (!collectionPath) return;
-      const colRef = collection(db, collectionPath);
-      const q = query(colRef, orderBy('date'));
-      onSnapshot(q, (snapshot) => {
-        showLoading(true);
-        const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        data = docs.sort((a, b) => new Date(a.date) - new Date(b.date));
-        renderTable();
-        renderChart();
-        showLoading(false);
-      }, (error) => {
-        console.error("Lỗi khi lắng nghe Firestore: ", error);
-        showModal("Có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại.");
-        showLoading(false);
-      });
-    }
+        function showMessage(msg) {
+            document.getElementById('message-content').textContent = msg;
+            messageBox.classList.remove('hidden');
+        }
 
-    // Render bảng
-    function renderTable() {
-      healthTableBody.innerHTML = '';
-      if (data.length === 0) {
-        healthTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Chưa có dữ liệu nào được lưu.</td></tr>';
-        return;
-      }
-      data.forEach(entry => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${entry.date}</td>
-          <td>${entry.weight || '-'} kg</td>
-          <td>${entry.bp_s || '-'}/${entry.bp_d || '-'}</td>
-          <td>${entry.hr || '-'} bpm</td>
-          <td>${entry.sleep || '-'} giờ</td>
-          <td>${entry.steps || '-'}</td>
-          <td>${entry.notes || '-'}</td>
-          <td>
-            <button class="ghost delete-btn" data-id="${entry.id}">Xóa</button>
-          </td>
-        `;
-        healthTableBody.appendChild(row);
-      });
+        function hideMessageBox() {
+            messageBox.classList.add('hidden');
+        }
 
-      document.querySelectorAll('.delete-btn').forEach(button => {
-        button.addEventListener('click', handleDelete);
-      });
-    }
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
 
-    // Render chart
-    function renderChart() {
-      const dates = data.map(entry => entry.date);
-      const weights = data.map(entry => entry.weight);
-      const bp_s = data.map(entry => entry.bp_s);
-      const bp_d = data.map(entry => entry.bp_d);
-      const hrs = data.map(entry => entry.hr);
-      const sleep = data.map(entry => entry.sleep);
-      const steps = data.map(entry => entry.steps);
+        // --- Authentication Logic ---
+        function handleAuthStateChange(user) {
+            showLoading(false);
+            if (user) {
+                // If user is logged in, hide login form and show header + main content
+                loginForm.classList.add('hidden');
+                mainHeader.classList.remove('hidden'); 
+                mainContent.classList.remove('hidden');
+                userEmailDisplay.textContent = user.email;
 
-      const ctx = document.getElementById('healthChart').getContext('2d');
-      if (myChart) {
-        myChart.destroy();
-      }
-      myChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: dates,
-          datasets: [{
-            label: 'Cân nặng (kg)',
-            data: weights,
-            borderColor: 'rgba(255, 99, 132, 1)',
-            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            fill: false,
-            tension: 0.1
-          }, {
-            label: 'Huyết áp Tâm thu',
-            data: bp_s,
-            borderColor: 'rgba(54, 162, 235, 1)',
-            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            fill: false,
-            tension: 0.1
-          }, {
-            label: 'Huyết áp Tâm trương',
-            data: bp_d,
-            borderColor: 'rgba(75, 192, 192, 1)',
-            backgroundColor: 'rgba(75, 192, 192, 0.2)',
-            fill: false,
-            tension: 0.1
-          }, {
-            label: 'Nhịp tim (bpm)',
-            data: hrs,
-            borderColor: 'rgba(153, 102, 255, 1)',
-            backgroundColor: 'rgba(153, 102, 255, 0.2)',
-            fill: false,
-            tension: 0.1
-          }, {
-            label: 'Giấc ngủ (giờ)',
-            data: sleep,
-            borderColor: 'rgba(255, 159, 64, 1)',
-            backgroundColor: 'rgba(255, 159, 64, 0.2)',
-            fill: false,
-            tension: 0.1
-          }, {
-            label: 'Bước chân',
-            data: steps,
-            borderColor: 'rgba(255, 205, 86, 1)',
-            backgroundColor: 'rgba(255, 205, 86, 0.2)',
-            fill: false,
-            tension: 0.1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: 'Ngày'
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: 'Giá trị'
-              }
+                // Show admin button for a specific user
+                if (user.email === 'admin@myapp.com') {
+                    document.getElementById('add-user-btn').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-user-btn').classList.add('hidden');
+                }
+
+                listenForProfiles();
+            } else {
+                // If user is logged out, show login form and hide header + main content
+                loginForm.classList.remove('hidden');
+                mainHeader.classList.add('hidden');
+                mainContent.classList.add('hidden');
+                document.getElementById('login-password').value = '';
+                profileList.innerHTML = '';
+                healthDataSection.classList.add('hidden');
             }
-          }
         }
-      });
-    }
 
-    // Đăng nhập
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        showLoading(true);
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-        try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            // Lưu email vào profile
-            await setDoc(doc(db, "users", userCredential.user.uid), { email: email }, { merge: true });
-            authErrorMsg.textContent = '';
-        } catch (error) {
-            console.error(error);
-            authErrorMsg.textContent = "Đăng nhập thất bại. Vui lòng kiểm tra lại email/mật khẩu.";
-        } finally {
-            showLoading(false);
-        }
-    });
-    
-    // Thêm tài khoản (chỉ admin)
-    addAccountForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        showLoading(true);
-        const email = document.getElementById('newEmail').value;
-        const password = document.getElementById('newPassword').value;
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            // Lưu email vào profile của người dùng mới tạo
-            await setDoc(doc(db, "users", userCredential.user.uid), { email: email }, { merge: true });
-            showModal(`Đã tạo tài khoản mới: ${email}`);
-            addAccountModal.style.display = 'none';
-            addAccountForm.reset();
-        } catch (error) {
-            console.error(error);
-            addAccountErrorMsg.textContent = "Lỗi khi tạo tài khoản. Email có thể đã tồn tại hoặc mật khẩu quá yếu.";
-        } finally {
-            showLoading(false);
-        }
-    });
-    
-    // Đổi mật khẩu
-    changePasswordForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        showLoading(true);
-        const user = auth.currentUser;
-        const newPassword = document.getElementById('newPassword').value;
-        if (user) {
+        // Event listener for login
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            loginErrorMsg.textContent = '';
+            showLoading();
+            
             try {
-                await updatePassword(user, newPassword);
-                showModal("Mật khẩu đã được đổi thành công!");
-                changePasswordModal.style.display = 'none';
-                changePasswordForm.reset();
+                await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
-                console.error(error);
-                changePasswordErrorMsg.textContent = "Lỗi khi đổi mật khẩu. Vui lòng thử lại sau.";
+                loginErrorMsg.textContent = "Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.";
+                console.error("Login failed:", error);
             } finally {
                 showLoading(false);
             }
-        }
-    });
-
-    // Đăng xuất
-    logoutBtn.addEventListener('click', async () => {
-        showLoading(true);
-        try {
-            await signOut(auth);
-            showModal("Bạn đã đăng xuất thành công.");
-        } catch (error) {
-            console.error(error);
-            showModal("Lỗi khi đăng xuất.");
-        } finally {
-            showLoading(false);
-        }
-    });
-
-    // Submit form: lưu vào collection
-    entryForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      showLoading(true);
-      const user = auth.currentUser;
-      if (!user) {
-          showModal("Bạn cần đăng nhập để lưu dữ liệu.");
-          showLoading(false);
-          return;
-      }
-      const entry = {
-        date: document.getElementById('date').value,
-        weight: parseFloat(document.getElementById('weight').value) || null,
-        bp_s: parseInt(document.getElementById('bp_s').value) || null,
-        bp_d: parseInt(document.getElementById('bp_d').value) || null,
-        hr: parseInt(document.getElementById('hr').value) || null,
-        sleep: parseFloat(document.getElementById('sleep').value) || null,
-        steps: parseInt(document.getElementById('steps').value) || null,
-        notes: document.getElementById('notes').value || null,
-        timestamp: new Date()
-      };
-
-      try {
-        await addDoc(collection(db, getCollectionPath(user.uid)), entry);
-        showModal("Dữ liệu đã được lưu thành công!");
-        entryForm.reset();
-      } catch (error) {
-        console.error("Lỗi khi thêm tài liệu: ", error);
-        showModal("Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
-      } finally {
-        showLoading(false);
-      }
-    });
-
-    // Xóa 1 document
-    async function handleDelete(e) {
-      showLoading(true);
-      const docId = e.target.getAttribute('data-id');
-      const userUid = auth.currentUser.uid;
-      const targetUid = isAdmin ? currentAdminViewUid : userUid;
-      if (!targetUid || !docId) {
-          showLoading(false);
-          return;
-      }
-      try {
-        await deleteDoc(doc(db, getCollectionPath(targetUid), docId));
-        showModal("Dữ liệu đã được xóa thành công!");
-      } catch (error) {
-        console.error("Lỗi khi xóa tài liệu: ", error);
-        showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
-      } finally {
-        showLoading(false);
-      }
-    }
-
-    // Xuất CSV (header tiếng Việt)
-    exportBtn.addEventListener('click', () => {
-        const userUid = auth.currentUser.uid;
-        const targetUid = isAdmin ? currentAdminViewUid : userUid;
-        if (!targetUid) {
-            showModal("Bạn cần đăng nhập để xuất dữ liệu.");
-            return;
-        }
-        showLoading(true);
-        const headersMap = {
-            date: "Ngày",
-            weight: "Cân nặng (kg)",
-            bp_s: "Huyết áp (tâm thu)",
-            bp_d: "Huyết áp (tâm trương)",
-            hr: "Nhịp tim (bpm)",
-            sleep: "Giấc ngủ (giờ)",
-            steps: "Bước chân",
-            notes: "Ghi chú"
-        };
-        const keys = Object.keys(headersMap);
-        const csvRows = [];
-        csvRows.push(keys.map(k => `"${headersMap[k]}"`).join(','));
-        data.forEach(entry => {
-            const values = keys.map(k => {
-                const value = entry[k] !== undefined && entry[k] !== null ? entry[k] : '';
-                return `"${String(value).replace(/"/g, '""')}"`;
-            });
-            csvRows.push(values.join(','));
         });
-        const csvString = csvRows.join('\n');
-        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.setAttribute('download', 'suc_khoe.csv');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showLoading(false);
-    });
 
-    // Xoá toàn bộ
-    clearBtn.addEventListener('click', async () => {
-        const userUid = auth.currentUser.uid;
-        const targetUid = isAdmin ? currentAdminViewUid : userUid;
-        if (!targetUid) {
-            showModal("Bạn cần đăng nhập để xóa dữ liệu.");
-            return;
-        }
-        showLoading(true);
-        try {
-            const col = collection(db, getCollectionPath(targetUid));
-            const snap = await getDocs(col);
-            const deletes = [];
-            snap.forEach(d => {
-                deletes.push(deleteDoc(doc(db, getCollectionPath(targetUid), d.id)));
+        // Event listener for logout
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            showLoading();
+            try {
+                await signOut(auth);
+            } catch (error) {
+                showMessage("Đăng xuất thất bại. Vui lòng thử lại.");
+                console.error("Logout failed:", error);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        // Event listener for adding new user (Admin function)
+        document.getElementById('add-user-btn').addEventListener('click', () => {
+            document.getElementById('add-account-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('confirm-add-account').addEventListener('click', async () => {
+            const newEmail = document.getElementById('new-email-input').value;
+            const newPassword = document.getElementById('new-password-add-input').value;
+
+            if (newEmail && newPassword.length >= 6) {
+                hideModal('add-account-modal');
+                showLoading();
+                try {
+                    await createUserWithEmailAndPassword(auth, newEmail, newPassword);
+                    showMessage("Tài khoản mới đã được thêm thành công!");
+                } catch (error) {
+                    showMessage("Tạo tài khoản thất bại. Vui lòng kiểm tra email hoặc thử lại.");
+                    console.error("Create user failed:", error);
+                } finally {
+                    showLoading(false);
+                }
+            } else {
+                showMessage("Vui lòng nhập email hợp lệ và mật khẩu ít nhất 6 ký tự.");
+            }
+        });
+
+        // --- Profile Management Logic ---
+        document.getElementById('add-profile-btn').addEventListener('click', () => {
+            document.getElementById('profile-modal-title').textContent = "Thêm Hồ Sơ Mới";
+            document.getElementById('profile-form').reset();
+            document.getElementById('profile-id').value = '';
+            profileModal.classList.remove('hidden');
+        });
+
+        document.getElementById('profile-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const profileId = document.getElementById('profile-id').value;
+            const user = auth.currentUser;
+            if (!user) {
+                showMessage("Bạn cần phải đăng nhập để lưu hồ sơ.");
+                return;
+            }
+
+            const profileData = {
+                name: document.getElementById('profile-name').value,
+                age: document.getElementById('profile-age').value,
+                address: document.getElementById('profile-address').value,
+                notes: document.getElementById('profile-note').value,
+                userId: user.uid,
+                creatorEmail: user.email // Lấy email của người tạo hồ sơ
+            };
+
+            showLoading();
+            try {
+                if (profileId) {
+                    await updateDoc(doc(db, 'profiles', profileId), profileData);
+                    showMessage("Hồ sơ đã được cập nhật!");
+                } else {
+                    await addDoc(collection(db, 'profiles'), { ...profileData, createdAt: new Date() });
+                    showMessage("Hồ sơ mới đã được lưu thành công!");
+                }
+                hideModal('profile-modal');
+            } catch (error) {
+                showMessage("Lưu hồ sơ thất bại. Vui lòng thử lại.");
+                console.error("Save profile failed:", error);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        function renderProfiles(profiles) {
+            profileList.innerHTML = '';
+            if (profiles.length === 0) {
+                profileList.innerHTML = '<p class="text-gray-500 text-center w-full">Chưa có hồ sơ nào. Hãy thêm hồ sơ mới!</p>';
+                return;
+            }
+
+            profiles.forEach(profile => {
+                const profileCard = document.createElement('div');
+                profileCard.className = 'flex-shrink-0 bg-white p-6 rounded-xl shadow-md flex flex-col justify-between w-full sm:w-64 min-h-64 cursor-pointer hover:shadow-lg transition-shadow duration-300';
+                profileCard.innerHTML = `
+                    <div>
+                        <h3 class="text-xl font-bold text-indigo-600 mb-2">${profile.name}</h3>
+                        <div class="space-y-1 text-sm text-gray-700">
+                            <p><strong>Tuổi:</strong> ${profile.age}</p>
+                            <p><strong>Nơi ở:</strong> ${profile.address}</p>
+                            <p><strong>Ghi chú:</strong> ${profile.notes}</p>
+                            <p><strong>Tạo bởi:</strong> ${profile.creatorEmail || 'N/A'}</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button data-id="${profile.id}" class="view-btn bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-300 focus:outline-none"><i class="fas fa-eye"></i></button>
+                        <button data-id="${profile.id}" class="edit-btn bg-yellow-500 text-white p-2 rounded-full hover:bg-yellow-600 transition duration-300 focus:outline-none"><i class="fas fa-edit"></i></button>
+                        <button data-id="${profile.id}" class="delete-btn bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition duration-300 focus:outline-none"><i class="fas fa-trash-alt"></i></button>
+			<button data-id="${profile.id}" class="export-pdf-btn bg-green-500 text-white p-2 rounded-full hover:bg-green-600 transition duration-300"><i class="fas fa-file-export"></i></button>
+                    </div>
+                `;
+                profileList.appendChild(profileCard);
             });
-            await Promise.all(deletes);
-            showModal("Đã xóa tất cả dữ liệu thành công!");
-        } catch (error) {
-            console.error("Lỗi khi xóa tất cả dữ liệu: ", error);
-            showModal("Lỗi khi xóa dữ liệu. Vui lòng thử lại.");
-        } finally {
-            showLoading(false);
-        }
-    });
+            
+            // Attach event listeners to the profile list container using event delegation
+            profileList.addEventListener('click', (e) => {
+                const targetBtn = e.target.closest('button');
+                if (!targetBtn) return;
+                const profileId = targetBtn.dataset.id;
+                
+                if (targetBtn.classList.contains('view-btn')) {
+                    currentProfileId = profileId;
+                    healthDataSection.classList.remove('hidden');
+                    listenForHealthData(currentProfileId);
+                    healthDataSection.scrollIntoView({ behavior: 'smooth' });
+                } else if (targetBtn.classList.contains('edit-btn')) {
+                    const profileToEdit = profiles.find(p => p.id === profileId);
+                    document.getElementById('profile-modal-title').textContent = "Sửa Hồ Sơ";
+                    document.getElementById('profile-id').value = profileToEdit.id;
+                    document.getElementById('profile-name').value = profileToEdit.name;
+                    document.getElementById('profile-age').value = profileToEdit.age;
+                    document.getElementById('profile-address').value = profileToEdit.address;
+                    document.getElementById('profile-note').value = profileToEdit.notes;
+                    profileModal.classList.remove('hidden');
+                } else if (targetBtn.classList.contains('delete-btn')) {
+                    profileToDeleteId = profileId;
+                    deleteConfirmModal.classList.remove('hidden');
+               } else if (targetBtn.classList.contains('export-pdf-btn')) {
+    		    const profileToExport = profiles.find(p => p.id === profileId);
 
-    // Nhập CSV
-    importFile.addEventListener('change', (event) => {
-        const userUid = auth.currentUser.uid;
-        const targetUid = isAdmin ? currentAdminViewUid : userUid;
-        if (!targetUid) {
-            showModal("Bạn cần đăng nhập để nhập dữ liệu.");
-            return;
+                  // Hiển thị dữ liệu và vẽ chart trước
+                    currentProfileId = profileToExport.id;
+                    healthDataSection.classList.remove('hidden');
+                    listenForHealthData(currentProfileId);
+
+                  // Đợi 500ms cho Chart.js render xong rồi mới export
+                 setTimeout(() => {
+                   exportProfileToPDF(profileToExport);
+                }, 500);
+                }
+
+
+            });
         }
-        const file = event.target.files[0];
-        if (file) {
-            showLoading(true);
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const text = e.target.result;
-                const rows = text.split('\n').map(row => row.trim()).filter(row => row.length > 0);
-                if (rows.length > 1) {
-                    const headers = rows[0].split(',').map(h => h.replace(/"/g, ''));
-                    const headersMap = {
-                      "Ngày": "date", "Cân nặng (kg)": "weight", "Huyết áp (tâm thu)": "bp_s",
-                      "Huyết áp (tâm trương)": "bp_d", "Nhịp tim (bpm)": "hr",
-                      "Giấc ngủ (giờ)": "sleep", "Bước chân": "steps", "Ghi chú": "notes"
-                    };
-                    const importPromises = [];
-                    for (let i = 1; i < rows.length; i++) {
-                        const rowValues = rows[i].split(',').map(v => v.replace(/"/g, ''));
-                        const newEntry = {};
-                        headers.forEach((header, index) => {
-                            const key = headersMap[header.trim()];
-                            if (key) {
-                                let value = rowValues[index] || null;
-                                // Convert to correct data types
-                                if (['weight', 'sleep'].includes(key) && value) value = parseFloat(value);
-                                else if (['bp_s', 'bp_d', 'hr', 'steps'].includes(key) && value) value = parseInt(value);
-                                newEntry[key] = value;
-                            }
-                        });
-                        importPromises.push(addDoc(collection(db, getCollectionPath(targetUid)), newEntry));
-                    }
-                    try {
-                        await Promise.all(importPromises);
-                        showModal("Dữ liệu đã được nhập thành công!");
-                    } catch (error) {
-                        console.error("Lỗi khi nhập dữ liệu: ", error);
-                        showModal("Lỗi khi nhập dữ liệu. Vui lòng thử lại.");
+
+        // Real-time listener for profiles
+        function listenForProfiles() {
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            let q;
+            if (user.email === 'admin@myapp.com') {
+                q = collection(db, 'profiles');
+            } else {
+                q = query(collection(db, 'profiles'), where("userId", "==", user.uid));
+            }
+
+            onSnapshot(q, (querySnapshot) => {
+                const profiles = [];
+                querySnapshot.forEach((doc) => {
+                    profiles.push({ id: doc.id, ...doc.data() });
+                });
+                renderProfiles(profiles);
+            }, (error) => {
+                console.error("Lỗi khi lấy dữ liệu hồ sơ:", error);
+                //showMessage("Không thể tải dữ liệu hồ sơ.");
+            });
+        }
+
+        // Delete confirmation
+        document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+            hideModal('delete-confirm-modal');
+            if (profileToDeleteId) {
+                showLoading();
+                try {
+                    // Bước 1: Tìm tất cả các bản ghi sức khỏe liên quan
+                    const healthRecordsQuery = query(collection(db, 'healthRecords'), where("profileId", "==", profileToDeleteId));
+                    const healthRecordsSnapshot = await getDocs(healthRecordsQuery);
+
+                    // Bước 2: Xóa từng bản ghi sức khỏe
+                    const deletionPromises = [];
+                    healthRecordsSnapshot.forEach(doc => {
+                        deletionPromises.push(deleteDoc(doc.ref));
+                    });
+                    await Promise.all(deletionPromises);
+
+                    // Bước 3: Xóa hồ sơ chính
+                    await deleteDoc(doc(db, 'profiles', profileToDeleteId));
+
+                    showMessage("Hồ sơ và tất cả dữ liệu liên quan đã được xóa!");
+                } catch (error) {
+                    showMessage("Xóa hồ sơ thất bại.");
+                    console.error("Delete profile failed:", error);
+                } finally {
+                    showLoading(false);
+                    profileToDeleteId = null;
+                }
+            }
+        });
+
+        // --- Health Data Logic ---
+        document.getElementById('close-health-data-btn').addEventListener('click', () => {
+            healthDataSection.classList.add('hidden');
+            healthDataForm.reset();
+            healthDataList.innerHTML = '';
+            chartsSection.classList.add('hidden');
+            currentProfileId = null;
+            // Destroy all charts when closing
+            if (bpChartInstance) bpChartInstance.destroy();
+            if (heartRateChartInstance) heartRateChartInstance.destroy();
+            if (sleepChartInstance) sleepChartInstance.destroy();
+            if (stepsChartInstance) stepsChartInstance.destroy();
+            if (weightChartInstance) weightChartInstance.destroy();
+        });
+
+        healthDataForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentProfileId) {
+                showMessage("Vui lòng chọn một hồ sơ trước.");
+                return;
+            }
+
+            const healthData = {
+                date: document.getElementById('health-date').value,
+                weight: parseFloat(document.getElementById('health-weight').value) || null,
+                bloodPressure: document.getElementById('health-bp').value,
+                heartRate: parseInt(document.getElementById('health-heart-rate').value) || null,
+                sleep: parseFloat(document.getElementById('health-sleep').value) || null,
+                steps: parseInt(document.getElementById('health-steps').value) || null,
+                notes: document.getElementById('health-note').value,
+                profileId: currentProfileId,
+                createdAt: new Date()
+            };
+
+            showLoading();
+            try {
+                await addDoc(collection(db, 'healthRecords'), healthData);
+                showMessage("Dữ liệu sức khỏe đã được lưu thành công!");
+                healthDataForm.reset();
+            } catch (error) {
+                showMessage("Lưu dữ liệu sức khỏe thất bại.");
+                console.error("Save health data failed:", error);
+            } finally {
+                showLoading(false);
+            }
+        });
+        
+        function listenForHealthData(profileId) {
+            const q = query(collection(db, 'healthRecords'), where("profileId", "==", profileId));
+            onSnapshot(q, (querySnapshot) => {
+                const records = [];
+                querySnapshot.forEach((doc) => {
+                    records.push({ id: doc.id, ...doc.data() });
+                });
+                renderHealthData(records);
+            }, (error) => {
+                console.error("Lỗi khi lấy dữ liệu sức khỏe:", error);
+                //showMessage("Không thể tải dữ liệu sức khỏe.");
+            });
+        }
+
+        function renderHealthData(records) {
+            // Xóa nội dung danh sách cũ
+            healthDataList.innerHTML = '';
+            chartsSection.classList.add('hidden');
+
+            if (records.length === 0) {
+                healthDataList.innerHTML = '<p class="text-gray-500 text-center">Chưa có dữ liệu sức khỏe nào. Hãy thêm dữ liệu mới!</p>';
+                // Destroy existing charts if there is no data
+                if (bpChartInstance) bpChartInstance.destroy();
+                if (heartRateChartInstance) heartRateChartInstance.destroy();
+                if (sleepChartInstance) sleepChartInstance.destroy();
+                if (stepsChartInstance) stepsChartInstance.destroy();
+                if (weightChartInstance) weightChartInstance.destroy();
+                return;
+            }
+
+            // Sắp xếp dữ liệu theo ngày gần nhất
+            records.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate());
+
+            // Render danh sách dữ liệu
+            records.forEach(record => {
+                const date = record.date ? new Date(record.date).toLocaleDateString('vi-VN') : 'N/A';
+                const recordElement = document.createElement('div');
+                recordElement.className = 'bg-white p-4 rounded-xl shadow-md mb-3';
+                recordElement.innerHTML = `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm text-gray-700">
+                        <p><i class="fas fa-calendar-alt mr-2 text-indigo-500"></i><strong>Ngày:</strong> ${date}</p>
+                        <p><i class="fas fa-weight-hanging mr-2 text-indigo-500"></i><strong>Cân nặng:</strong> ${record.weight || 'N/A'} kg</p>
+                        <p><i class="fas fa-heartbeat mr-2 text-indigo-500"></i><strong>Huyết áp:</strong> ${record.bloodPressure || 'N/A'}</p>
+                        <p><i class="fas fa-tachometer-alt mr-2 text-indigo-500"></i><strong>Nhịp tim:</strong> ${record.heartRate || 'N/A'} bpm</p>
+                        <p><i class="fas fa-bed mr-2 text-indigo-500"></i><strong>Giấc ngủ:</strong> ${record.sleep || 'N/A'} giờ</p>
+                        <p><i class="fas fa-shoe-prints mr-2 text-indigo-500"></i><strong>Bước chân:</strong> ${record.steps || 'N/A'}</p>
+                    </div>
+                    <p class="text-sm text-gray-700 mt-2"><strong>Ghi chú:</strong> ${record.notes || 'Không có'}</p>
+                `;
+                healthDataList.appendChild(recordElement);
+            });
+
+            // Sau khi render danh sách, tiến hành vẽ biểu đồ
+            renderCharts(records);
+        }
+
+        function renderCharts(records) {
+            if (records.length < 2) {
+                chartsSection.classList.add('hidden');
+                return;
+            }
+            chartsSection.classList.remove('hidden');
+
+            // Hủy các biểu đồ cũ để vẽ lại
+            if (bpChartInstance) bpChartInstance.destroy();
+            if (heartRateChartInstance) heartRateChartInstance.destroy();
+            if (sleepChartInstance) sleepChartInstance.destroy();
+            if (stepsChartInstance) stepsChartInstance.destroy();
+            if (weightChartInstance) weightChartInstance.destroy();
+
+            // Sắp xếp dữ liệu theo ngày tăng dần để vẽ biểu đồ
+            records.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // Chuẩn bị dữ liệu cho biểu đồ
+            const dates = records.map(r => r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'N/A');
+            
+            const systolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[0]) : null);
+            const diastolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[1]) : null);
+            const heartRateData = records.map(r => r.heartRate);
+            const sleepData = records.map(r => r.sleep);
+            const stepsData = records.map(r => r.steps);
+            const weightData = records.map(r => r.weight);
+            
+            // Vẽ biểu đồ Cân nặng
+            const weightCtx = document.getElementById('weightChart').getContext('2d');
+            weightChartInstance = new Chart(weightCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Cân nặng (kg)',
+                        data: weightData,
+                        borderColor: 'rgb(255, 159, 64)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        title: { display: true, text: 'Biểu đồ Cân nặng', font: { size: 16 } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false }
                     }
                 }
-                showLoading(false);
-            };
-            reader.readAsText(file);
+            });
+
+            // Vẽ biểu đồ Huyết áp
+            const bpCtx = document.getElementById('bpChart').getContext('2d');
+            bpChartInstance = new Chart(bpCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Tâm thu (Systolic)',
+                        data: systolicData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1,
+                        fill: false
+                    }, {
+                        label: 'Tâm trương (Diastolic)',
+                        data: diastolicData,
+                        borderColor: 'rgb(255, 99, 132)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: 'Biểu đồ Huyết áp', font: { size: 16 } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+
+            // Vẽ biểu đồ Nhịp tim
+            const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
+            heartRateChartInstance = new Chart(heartRateCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Nhịp tim (bpm)',
+                        data: heartRateData,
+                        borderColor: 'rgb(54, 162, 235)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Biểu đồ Nhịp tim', font: { size: 16 } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+
+            // Vẽ biểu đồ Giấc ngủ
+            const sleepCtx = document.getElementById('sleepChart').getContext('2d');
+            sleepChartInstance = new Chart(sleepCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Giấc ngủ (giờ)',
+                        data: sleepData,
+                        borderColor: 'rgb(153, 102, 255)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Biểu đồ Giấc ngủ', font: { size: 16 } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+
+            // Vẽ biểu đồ Bước chân
+            const stepsCtx = document.getElementById('stepsChart').getContext('2d');
+            stepsChartInstance = new Chart(stepsCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Bước chân',
+                        data: stepsData,
+                        borderColor: 'rgb(255, 159, 64)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Biểu đồ Bước chân', font: { size: 16 } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
         }
-    });
-  </script>
+
+        // --- Event Listeners for Modals ---
+        document.getElementById('change-password-btn').addEventListener('click', () => {
+            changePasswordModal.classList.remove('hidden');
+        });
+        document.getElementById('confirm-change-password').addEventListener('click', async () => {
+            const newPassword = document.getElementById('new-password-input').value;
+            if (newPassword.length >= 6) {
+                hideModal('change-password-modal');
+                showLoading();
+                try {
+                    await updatePassword(auth.currentUser, newPassword);
+                    showMessage("Mật khẩu đã được đổi thành công!");
+                } catch (error) {
+                    showMessage("Thay đổi mật khẩu thất bại. Vui lòng thử lại sau.");
+                    console.error("Change password failed:", error);
+                } finally {
+                    showLoading(false);
+                }
+            } else {
+                showMessage("Mật khẩu phải có ít nhất 6 ký tự.");
+            }
+        });
+
+        // Event listeners to close all modals
+        document.getElementById('message-close-btn').addEventListener('click', hideMessageBox);
+        document.getElementById('cancel-change-password').addEventListener('click', () => hideModal('change-password-modal'));
+        document.getElementById('cancel-add-account').addEventListener('click', () => hideModal('add-account-modal'));
+        document.getElementById('cancel-profile-btn').addEventListener('click', () => hideModal('profile-modal'));
+        document.getElementById('cancel-delete-btn').addEventListener('click', () => hideModal('delete-confirm-modal'));
+
+async function exportProfileToPDF(profile) {
+    try {
+        showLoading(true);
+
+        // 1. Lấy dữ liệu healthRecords từ Firestore
+        const q = query(collection(db, 'healthRecords'), where("profileId", "==", profile.id));
+        const querySnapshot = await getDocs(q);
+
+        const healthRecords = [];
+        querySnapshot.forEach(doc => {
+            healthRecords.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Sắp xếp theo ngày
+        healthRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        // 2. Tạo nội dung text trước
+        const content = [
+            { text: 'HỒ SƠ NGƯỜI DÙNG', style: 'header' },
+            { text: `Họ tên: ${profile.name}\nTuổi: ${profile.age}\nĐịa chỉ: ${profile.address}\nGhi chú: ${profile.notes || 'Không có'}\nNgười tạo: ${profile.creatorEmail}\n\n`, style: 'subheader' },
+            { text: 'DỮ LIỆU SỨC KHỎE', style: 'header' }
+        ];
+
+        healthRecords.forEach((rec, i) => {
+            content.push({
+                text: `#${i + 1} - Ngày: ${rec.date}
+  Cân nặng: ${rec.weight || 'N/A'} kg
+  Huyết áp: ${rec.bloodPressure || 'N/A'}
+  Nhịp tim: ${rec.heartRate || 'N/A'} bpm
+  Giấc ngủ: ${rec.sleep || 'N/A'} giờ
+  Bước chân: ${rec.steps || 'N/A'}
+  Ghi chú: ${rec.notes || 'Không có'}\n\n`,
+                style: 'normal'
+            });
+        });
+
+        // 3. Thêm biểu đồ (nếu có hiển thị trên web)
+        const charts = [
+            { id: "weightChart", title: "Biểu đồ Cân nặng" },
+            { id: "bpChart", title: "Biểu đồ Huyết áp" },
+            { id: "heartRateChart", title: "Biểu đồ Nhịp tim" },
+            { id: "sleepChart", title: "Biểu đồ Giấc ngủ" },
+            { id: "stepsChart", title: "Biểu đồ Bước chân" }
+        ];
+
+        for (const chart of charts) {
+            const canvas = document.getElementById(chart.id);
+            if (canvas) {
+                const imgData = canvas.toDataURL("image/png");
+                content.push({ text: chart.title, style: "header" });
+                content.push({ image: imgData, width: 500, margin: [0, 10, 0, 20] });
+            }
+        }
+
+        // 4. Định nghĩa PDF
+        const docDefinition = {
+            content: content,
+            styles: {
+                header: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+                subheader: { fontSize: 12, margin: [0, 5, 0, 5] },
+                normal: { fontSize: 11 }
+            },
+            defaultStyle: {
+                font: 'Roboto' // pdfmake có Roboto hỗ trợ Unicode
+            }
+        };
+
+        // 5. Xuất file PDF
+        pdfMake.createPdf(docDefinition).download(`profile_${profile.id}.pdf`);
+        showMessage("Xuất PDF thành công!");
+    } catch (error) {
+        console.error("Export PDF failed:", error);
+        showMessage("Xuất PDF thất bại.");
+    } finally {
+        showLoading(false);
+    }
+}
+
+
+    </script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+</head>
+<body class="bg-gray-100 min-h-screen font-sans antialiased text-gray-800">
+    <!-- Header chính (chỉ hiển thị khi đã đăng nhập) -->
+    <header id="main-header" class="hidden fixed top-0 left-0 w-full bg-indigo-600 text-white shadow-md p-4 z-10">
+        <div class="container mx-auto flex items-center justify-between flex-wrap">
+            <span id="user-email-display" class="text-lg font-bold mr-4"></span>
+            <div class="flex items-center space-x-2 flex-wrap mt-2 sm:mt-0">
+                <button id="add-profile-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">Thêm Hồ Sơ</button>
+                <button id="change-password-btn" class="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition duration-300">Đổi Mật Khẩu</button>
+                <button id="logout-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition duration-300">Đăng Xuất</button>
+                <button id="add-user-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300 hidden">Thêm Tài Khoản</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="w-full max-w-7xl mx-auto p-4 md:p-8 mt-16">
+        <!-- Biểu mẫu đăng nhập -->
+        <div id="login-form" class="bg-white p-8 md:p-12 rounded-xl shadow-2xl w-full max-w-md mx-auto">
+            <h2 class="text-4xl font-extrabold text-center text-indigo-600 mb-8">Đăng Nhập</h2>
+            <form>
+                <div class="mb-5">
+                    <label for="login-email" class="block text-gray-700 font-semibold mb-2">Email</label>
+                    <input type="email" id="login-email" class="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-200 transition" placeholder="example@gmail.com" required>
+                </div>
+                <div class="mb-8">
+                    <label for="login-password" class="block text-gray-700 font-semibold mb-2">Mật khẩu</label>
+                    <input type="password" id="login-password" class="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-200 transition" placeholder="Mật khẩu của bạn" required>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg hover:bg-indigo-700 transition duration-300 shadow-lg">Đăng Nhập</button>
+                <div id="login-error-msg" class="text-red-500 text-center mt-4 font-medium"></div>
+            </form>
+        </div>
+
+        <!-- Nội dung chính (sau khi đăng nhập) -->
+        <div id="main-content" class="hidden mt-8">
+            <h2 class="text-3xl font-bold text-gray-700 mb-6 text-center">Danh sách Hồ sơ</h2>
+            <div id="profile-list" class="flex overflow-x-auto gap-6 p-4 -mx-4 pb-6 scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-indigo-100">
+                <!-- Hồ sơ sẽ được hiển thị ở đây -->
+            </div>
+        </div>
+
+        <!-- Section nhập liệu sức khỏe -->
+        <div id="health-data-section" class="hidden mt-8 p-8 bg-white rounded-xl shadow-2xl w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-3xl font-bold text-indigo-600">Dữ Liệu Sức Khỏe</h3>
+                <button id="close-health-data-btn" class="text-gray-500 hover:text-gray-700 transition duration-300">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            
+            <!-- Form nhập liệu -->
+            <form id="health-data-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="health-date" class="block text-gray-700 font-medium mb-1">Ngày</label>
+                    <input type="date" id="health-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition">
+                </div>
+                <div>
+                    <label for="health-weight" class="block text-gray-700 font-medium mb-1">Cân nặng (kg)</label>
+                    <input type="number" id="health-weight" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 65">
+                </div>
+                <div>
+                    <label for="health-bp" class="block text-gray-700 font-medium mb-1">Huyết áp</label>
+                    <input type="text" id="health-bp" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 120/80">
+                </div>
+                <div>
+                    <label for="health-heart-rate" class="block text-gray-700 font-medium mb-1">Nhịp tim (bpm)</label>
+                    <input type="number" id="health-heart-rate" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 75">
+                </div>
+                <div>
+                    <label for="health-sleep" class="block text-gray-700 font-medium mb-1">Giấc ngủ (giờ)</label>
+                    <input type="number" id="health-sleep" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 8">
+                </div>
+                <div>
+                    <label for="health-steps" class="block text-gray-700 font-medium mb-1">Bước chân</label>
+                    <input type="number" id="health-steps" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 10000">
+                </div>
+                <div class="col-span-1 md:col-span-2">
+                    <label for="health-note" class="block text-gray-700 font-medium mb-1">Ghi chú</label>
+                    <textarea id="health-note" rows="3" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Thêm ghi chú..."></textarea>
+                </div>
+                <div class="col-span-1 md:col-span-2 flex justify-end mt-4">
+                    <button type="submit" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 transition duration-300 shadow-md">Lưu</button>
+                </div>
+            </form>
+
+            <hr class="my-8">
+            
+            <!-- Danh sách dữ liệu sức khỏe đã lưu -->
+            <div id="health-data-list-container" class="h-[30rem] overflow-y-auto pr-4">
+                <div id="health-data-list" class="space-y-4">
+                    <!-- Dữ liệu sức khỏe sẽ được hiển thị ở đây -->
+                </div>
+            </div>
+            
+            <!-- Phần biểu đồ -->
+            <div id="charts-section" class="hidden mt-8 p-8 bg-white rounded-xl shadow-2xl">
+                <h3 class="text-2xl font-bold text-gray-700 mb-6 text-center">Biểu Đồ Sức Khỏe</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                        <canvas id="weightChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                        <canvas id="bpChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                        <canvas id="heartRateChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                        <canvas id="sleepChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                        <canvas id="stepsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Các Modal (pop-up) -->
+        <!-- Hộp thoại đổi mật khẩu -->
+        <div id="change-password-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-20">
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                <h3 class="text-2xl font-bold text-center mb-6">Đổi Mật Khẩu</h3>
+                <input type="password" id="new-password-input" class="w-full px-5 py-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nhập mật khẩu mới" required>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-change-password" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">Hủy</button>
+                    <button id="confirm-change-password" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Xác Nhận</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hộp thoại thêm tài khoản mới -->
+        <div id="add-account-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-20">
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                <h3 class="text-2xl font-bold text-center mb-6">Thêm Tài Khoản Mới</h3>
+                <input type="email" id="new-email-input" class="w-full px-5 py-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Email" required>
+                <input type="password" id="new-password-add-input" class="w-full px-5 py-3 border rounded-lg mb-5 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Mật khẩu (ít nhất 6 ký tự)" required>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-add-account" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">Hủy</button>
+                    <button id="confirm-add-account" class="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">Thêm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hộp thoại thêm/sửa hồ sơ -->
+        <div id="profile-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-30">
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                <h3 id="profile-modal-title" class="text-2xl font-bold text-center mb-6"></h3>
+                <form id="profile-form">
+                    <input type="hidden" id="profile-id">
+                    <input type="text" id="profile-name" class="w-full px-5 py-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Họ và tên" required>
+                    <input type="number" id="profile-age" class="w-full px-5 py-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Tuổi" required>
+                    <input type="text" id="profile-address" class="w-full px-5 py-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nơi ở" required>
+                    <textarea id="profile-note" class="w-full px-5 py-3 border rounded-lg mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500" rows="3" placeholder="Ghi chú"></textarea>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="cancel-profile-btn" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">Hủy</button>
+                        <button type="submit" id="save-profile-btn" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Lưu Hồ Sơ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Hộp thoại xác nhận xóa hồ sơ -->
+        <div id="delete-confirm-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-40">
+            <div class="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center">
+                <p class="text-lg font-semibold text-gray-700 mb-6">Bạn có chắc chắn muốn xóa hồ sơ này không?</p>
+                <div class="flex justify-center space-x-3">
+                    <button id="cancel-delete-btn" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">Hủy</button>
+                    <button id="confirm-delete-btn" class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">Xóa</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chỉ báo tải toàn cầu -->
+        <div id="loading-indicator" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white"></div>
+        </div>
+        
+        <!-- Hộp thoại thông báo tùy chỉnh -->
+        <div id="message-box" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-40">
+            <div class="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center">
+                <p id="message-content" class="text-lg font-semibold text-gray-700 mb-6"></p>
+                <button id="message-close-btn" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition duration-300">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+
+
 </body>
 </html>
