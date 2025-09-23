@@ -14,7 +14,7 @@
     <script type="module">
         // Global variables for Firebase
         let app, auth, db;
-       const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDGJOZMUz2ITGwsXMQAeGU2KeZi0njShvg",
   authDomain: "suckhoeuutienso1.firebaseapp.com",
   projectId: "suckhoeuutienso1",
@@ -79,7 +79,8 @@
         let currentProfileId = null;
 
         // Chart instances
-        let bpChartInstance, heartRateChartInstance, sleepChartInstance, stepsChartInstance, weightChartInstance;
+        let systolicChartInstance, diastolicChartInstance, heartRateChartInstance, sleepChartInstance, stepsChartInstance, weightChartInstance;
+
 
         // --- Helper Functions ---
         function showLoading(show = true) {
@@ -107,7 +108,7 @@
                 loginForm.classList.add('hidden');
                 mainHeader.classList.remove('hidden'); 
                 mainContent.classList.remove('hidden');
-                userEmailDisplay.textContent = user.email;
+              
 
                 // Show admin button for a specific user
                 if (user.email === 'admin@myapp.com') {
@@ -247,6 +248,12 @@
                             <p><strong>Nơi ở:</strong> ${profile.address}</p>
                             <p><strong>Ghi chú:</strong> ${profile.notes}</p>
                             <p><strong>Tạo bởi:</strong> ${profile.creatorEmail || 'N/A'}</p>
+			    <p><strong>Ngày tạo:</strong> ${profile.createdAt 
+                 	    ? (profile.createdAt.toDate 
+     			    ? profile.createdAt.toDate().toLocaleDateString('vi-VN') 
+     		            : new Date(profile.createdAt).toLocaleDateString('vi-VN')) 
+    			    : 'N/A'}</p>
+
                         </div>
                     </div>
                     <div class="flex justify-end space-x-2 mt-4">
@@ -351,6 +358,21 @@
                 } finally {
                     showLoading(false);
                     profileToDeleteId = null;
+		    // Sau khi xóa xong
+			healthDataSection.classList.add('hidden');
+			healthDataForm.reset();
+			healthDataList.innerHTML = '';
+			chartsSection.classList.add('hidden');
+			currentProfileId = null;
+
+			// Hủy luôn các chart nếu đang có
+			if (systolicChartInstance) systolicChartInstance.destroy();
+                        if (diastolicChartInstance) diastolicChartInstance.destroy();
+
+			if (heartRateChartInstance) heartRateChartInstance.destroy();
+			if (sleepChartInstance) sleepChartInstance.destroy();
+			if (stepsChartInstance) stepsChartInstance.destroy();
+			if (weightChartInstance) weightChartInstance.destroy();
                 }
             }
         });
@@ -363,7 +385,9 @@
             chartsSection.classList.add('hidden');
             currentProfileId = null;
             // Destroy all charts when closing
-            if (bpChartInstance) bpChartInstance.destroy();
+            if (systolicChartInstance) systolicChartInstance.destroy();
+	    if (diastolicChartInstance) diastolicChartInstance.destroy();
+
             if (heartRateChartInstance) heartRateChartInstance.destroy();
             if (sleepChartInstance) sleepChartInstance.destroy();
             if (stepsChartInstance) stepsChartInstance.destroy();
@@ -376,7 +400,12 @@
                 showMessage("Vui lòng chọn một hồ sơ trước.");
                 return;
             }
-
+                 // ✅ Kiểm tra ngày
+            const dateValue = document.getElementById('health-date').value;
+            if (!dateValue) {
+              showMessage("Vui lòng chọn ngày trước khi lưu dữ liệu.");
+              return;
+             }
             const healthData = {
                 date: document.getElementById('health-date').value,
                 weight: parseFloat(document.getElementById('health-weight').value) || null,
@@ -424,7 +453,9 @@
             if (records.length === 0) {
                 healthDataList.innerHTML = '<p class="text-gray-500 text-center">Chưa có dữ liệu sức khỏe nào. Hãy thêm dữ liệu mới!</p>';
                 // Destroy existing charts if there is no data
-                if (bpChartInstance) bpChartInstance.destroy();
+                if (systolicChartInstance) systolicChartInstance.destroy();
+		if (diastolicChartInstance) diastolicChartInstance.destroy();
+
                 if (heartRateChartInstance) heartRateChartInstance.destroy();
                 if (sleepChartInstance) sleepChartInstance.destroy();
                 if (stepsChartInstance) stepsChartInstance.destroy();
@@ -458,169 +489,72 @@
             renderCharts(records);
         }
 
-        function renderCharts(records) {
-            if (records.length < 2) {
-                chartsSection.classList.add('hidden');
-                return;
+
+
+
+function renderCharts(records) {
+    if (records.length < 2) {
+        chartsSection.classList.add('hidden');
+        return;
+    }
+    chartsSection.classList.remove('hidden');
+
+    // Hủy các biểu đồ cũ
+    if (systolicChartInstance) systolicChartInstance.destroy();
+    if (diastolicChartInstance) diastolicChartInstance.destroy();
+    if (heartRateChartInstance) heartRateChartInstance.destroy();
+    if (sleepChartInstance) sleepChartInstance.destroy();
+    if (stepsChartInstance) stepsChartInstance.destroy();
+    if (weightChartInstance) weightChartInstance.destroy();
+
+    // Sắp xếp dữ liệu theo ngày
+    records.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const dates = records.map(r => r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'N/A');
+    const systolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[0]) : null);
+    const diastolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[1]) : null);
+    const heartRateData = records.map(r => r.heartRate);
+    const sleepData = records.map(r => r.sleep);
+    const stepsData = records.map(r => r.steps);
+    const weightData = records.map(r => r.weight);
+
+    function createLineChart(ctxId, data, color, titleText) {
+        const ctx = document.getElementById(ctxId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    data: data,
+                    borderColor: color,
+                    tension: 0.1,
+                    fill: false
+                    // label: không cần, xóa đi
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }, // tắt label
+                    title: { display: true, text: titleText, font: { size: 16 } }
+                },
+                scales: { y: { beginAtZero: false } }
             }
-            chartsSection.classList.remove('hidden');
+        });
+    }
 
-            // Hủy các biểu đồ cũ để vẽ lại
-            if (bpChartInstance) bpChartInstance.destroy();
-            if (heartRateChartInstance) heartRateChartInstance.destroy();
-            if (sleepChartInstance) sleepChartInstance.destroy();
-            if (stepsChartInstance) stepsChartInstance.destroy();
-            if (weightChartInstance) weightChartInstance.destroy();
+    // Tạo các biểu đồ line
+    systolicChartInstance = createLineChart('systolicChart', systolicData, 'rgb(75, 192, 192)', 'Biểu đồ Tâm thu');
+    diastolicChartInstance = createLineChart('diastolicChart', diastolicData, 'rgb(255, 99, 132)', 'Biểu đồ Tâm trương');
+    heartRateChartInstance = createLineChart('heartRateChart', heartRateData, 'rgb(54, 162, 235)', 'Biểu đồ Nhịp tim');
+    sleepChartInstance = createLineChart('sleepChart', sleepData, 'rgb(153, 102, 255)', 'Biểu đồ Giấc ngủ');
+    stepsChartInstance = createLineChart('stepsChart', stepsData, 'rgb(255, 159, 64)', 'Biểu đồ Bước chân');
+    weightChartInstance = createLineChart('weightChart', weightData, 'rgb(255, 206, 86)', 'Biểu đồ Cân nặng');
+}
 
-            // Sắp xếp dữ liệu theo ngày tăng dần để vẽ biểu đồ
-            records.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-            // Chuẩn bị dữ liệu cho biểu đồ
-            const dates = records.map(r => r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'N/A');
-            
-            const systolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[0]) : null);
-            const diastolicData = records.map(r => r.bloodPressure ? parseInt(r.bloodPressure.split('/')[1]) : null);
-            const heartRateData = records.map(r => r.heartRate);
-            const sleepData = records.map(r => r.sleep);
-            const stepsData = records.map(r => r.steps);
-            const weightData = records.map(r => r.weight);
-            
-            // Vẽ biểu đồ Cân nặng
-            const weightCtx = document.getElementById('weightChart').getContext('2d');
-            weightChartInstance = new Chart(weightCtx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: [{
-                        label: 'Cân nặng (kg)',
-                        data: weightData,
-                        borderColor: 'rgb(255, 159, 64)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { display: true },
-                        title: { display: true, text: 'Biểu đồ Cân nặng', font: { size: 16 } }
-                    },
-                    scales: {
-                        y: { beginAtZero: false }
-                    }
-                }
-            });
 
-            // Vẽ biểu đồ Huyết áp
-            const bpCtx = document.getElementById('bpChart').getContext('2d');
-            bpChartInstance = new Chart(bpCtx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: [{
-                        label: 'Tâm thu (Systolic)',
-                        data: systolicData,
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1,
-                        fill: false
-                    }, {
-                        label: 'Tâm trương (Diastolic)',
-                        data: diastolicData,
-                        borderColor: 'rgb(255, 99, 132)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'top' },
-                        title: { display: true, text: 'Biểu đồ Huyết áp', font: { size: 16 } }
-                    },
-                    scales: {
-                        y: { beginAtZero: false }
-                    }
-                }
-            });
 
-            // Vẽ biểu đồ Nhịp tim
-            const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
-            heartRateChartInstance = new Chart(heartRateCtx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: [{
-                        label: 'Nhịp tim (bpm)',
-                        data: heartRateData,
-                        borderColor: 'rgb(54, 162, 235)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Biểu đồ Nhịp tim', font: { size: 16 } }
-                    },
-                    scales: {
-                        y: { beginAtZero: false }
-                    }
-                }
-            });
-
-            // Vẽ biểu đồ Giấc ngủ
-            const sleepCtx = document.getElementById('sleepChart').getContext('2d');
-            sleepChartInstance = new Chart(sleepCtx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: [{
-                        label: 'Giấc ngủ (giờ)',
-                        data: sleepData,
-                        borderColor: 'rgb(153, 102, 255)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Biểu đồ Giấc ngủ', font: { size: 16 } }
-                    },
-                    scales: {
-                        y: { beginAtZero: false }
-                    }
-                }
-            });
-
-            // Vẽ biểu đồ Bước chân
-            const stepsCtx = document.getElementById('stepsChart').getContext('2d');
-            stepsChartInstance = new Chart(stepsCtx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: [{
-                        label: 'Bước chân',
-                        data: stepsData,
-                        borderColor: 'rgb(255, 159, 64)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Biểu đồ Bước chân', font: { size: 16 } }
-                    },
-                    scales: {
-                        y: { beginAtZero: false }
-                    }
-                }
-            });
-        }
 
         // --- Event Listeners for Modals ---
         document.getElementById('change-password-btn').addEventListener('click', () => {
@@ -720,7 +654,8 @@ async function exportProfileToPDF(profile) {
         };
 
         // 5. Xuất file PDF
-        pdfMake.createPdf(docDefinition).download(`profile_${profile.id}.pdf`);
+	const filename = `${profile.name.replace(/\s/g, '')}_${profile.age}.pdf`;
+	pdfMake.createPdf(docDefinition).download(filename);
         showMessage("Xuất PDF thành công!");
     } catch (error) {
         console.error("Export PDF failed:", error);
@@ -729,27 +664,52 @@ async function exportProfileToPDF(profile) {
         showLoading(false);
     }
 }
-
-
-    </script>
-
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+<style>
+/* wrapper cho từng canvas */
+.chart-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden; /* không cho tràn ngoài viewport */
+}
 
+/* canvas co giãn theo chiều ngang, cao vừa đủ */
+.chart-wrapper canvas {
+  width: 100% !important;
+  height: 280px !important; /* mobile */
+  display: block;
+}
+
+/* trên màn to, tăng chiều cao */
+@media (min-width: 768px) {
+  .chart-wrapper canvas { height: 360px !important; }
+}
+</style>
+
+
+
+
+
+
+	
 </head>
 <body class="bg-gray-100 min-h-screen font-sans antialiased text-gray-800">
     <!-- Header chính (chỉ hiển thị khi đã đăng nhập) -->
-    <header id="main-header" class="hidden fixed top-0 left-0 w-full bg-indigo-600 text-white shadow-md p-4 z-10">
-        <div class="container mx-auto flex items-center justify-between flex-wrap">
-            <span id="user-email-display" class="text-lg font-bold mr-4"></span>
-            <div class="flex items-center space-x-2 flex-wrap mt-2 sm:mt-0">
-                <button id="add-profile-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">Thêm Hồ Sơ</button>
-                <button id="change-password-btn" class="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition duration-300">Đổi Mật Khẩu</button>
-                <button id="logout-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition duration-300">Đăng Xuất</button>
-                <button id="add-user-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300 hidden">Thêm Tài Khoản</button>
-            </div>
-        </div>
-    </header>
+<header id="main-header" class="hidden fixed top-0 left-0 w-full bg-indigo-600 text-white shadow-md p-2 z-10">
+  <div class="container mx-auto flex justify-end">
+    <div class="flex items-center space-x-2">
+      <button id="add-profile-btn" class="bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg hover:bg-blue-600 transition">Thêm Hồ Sơ</button>
+      <button id="change-password-btn" class="bg-yellow-500 text-white font-bold py-1 px-3 text-sm rounded-lg hover:bg-yellow-600 transition">Đổi Mật Khẩu</button>
+      <button id="logout-btn" class="bg-red-500 text-white font-bold py-1 px-3 text-sm rounded-lg hover:bg-red-600 transition">Đăng Xuất</button>
+      <button id="add-user-btn" class="bg-green-500 text-white font-bold py-1 px-3 text-sm rounded-lg hover:bg-green-600 transition hidden">Thêm Tài Khoản</button>
+    </div>
+  </div>
+</header>
+
+
+
 
     <div class="w-full max-w-7xl mx-auto p-4 md:p-8 mt-16">
         <!-- Biểu mẫu đăng nhập -->
@@ -786,40 +746,52 @@ async function exportProfileToPDF(profile) {
                 </button>
             </div>
             
-            <!-- Form nhập liệu -->
-            <form id="health-data-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="health-date" class="block text-gray-700 font-medium mb-1">Ngày</label>
-                    <input type="date" id="health-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition">
-                </div>
-                <div>
-                    <label for="health-weight" class="block text-gray-700 font-medium mb-1">Cân nặng (kg)</label>
-                    <input type="number" id="health-weight" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 65">
-                </div>
-                <div>
-                    <label for="health-bp" class="block text-gray-700 font-medium mb-1">Huyết áp</label>
-                    <input type="text" id="health-bp" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 120/80">
-                </div>
-                <div>
-                    <label for="health-heart-rate" class="block text-gray-700 font-medium mb-1">Nhịp tim (bpm)</label>
-                    <input type="number" id="health-heart-rate" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 75">
-                </div>
-                <div>
-                    <label for="health-sleep" class="block text-gray-700 font-medium mb-1">Giấc ngủ (giờ)</label>
-                    <input type="number" id="health-sleep" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 8">
-                </div>
-                <div>
-                    <label for="health-steps" class="block text-gray-700 font-medium mb-1">Bước chân</label>
-                    <input type="number" id="health-steps" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 10000">
-                </div>
-                <div class="col-span-1 md:col-span-2">
-                    <label for="health-note" class="block text-gray-700 font-medium mb-1">Ghi chú</label>
-                    <textarea id="health-note" rows="3" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Thêm ghi chú..."></textarea>
-                </div>
-                <div class="col-span-1 md:col-span-2 flex justify-end mt-4">
-                    <button type="submit" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 transition duration-300 shadow-md">Lưu</button>
-                </div>
-            </form>
+    <!-- Form nhập liệu -->
+<form id="health-data-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+        <label for="health-date" class="block text-gray-700 font-medium mb-1">Ngày</label>
+        <input type="date" id="health-date" 
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition">
+    </div>
+    <div>
+        <label for="health-weight" class="block text-gray-700 font-medium mb-1">Cân nặng (kg)</label>
+        <input type="number" id="health-weight" value="65"
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label for="health-bp" class="block text-gray-700 font-medium mb-1">Huyết áp</label>
+        <input type="text" id="health-bp" value="120/80"
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label for="health-heart-rate" class="block text-gray-700 font-medium mb-1">Nhịp tim (bpm)</label>
+        <input type="number" id="health-heart-rate" value="75"
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label for="health-sleep" class="block text-gray-700 font-medium mb-1">Giấc ngủ (giờ)</label>
+        <input type="number" id="health-sleep" value="8" step="0.1"
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label for="health-steps" class="block text-gray-700 font-medium mb-1">Bước chân</label>
+        <input type="number" id="health-steps" value="10000"
+               class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </div>
+    <div class="col-span-1 md:col-span-2">
+        <label for="health-note" class="block text-gray-700 font-medium mb-1">Ghi chú</label>
+        <textarea id="health-note" rows="3"
+                  class="w-full border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  placeholder="Thêm ghi chú..."></textarea>
+    </div>
+    <div class="col-span-1 md:col-span-2 flex justify-end mt-4">
+        <button type="submit"
+                class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 transition duration-300 shadow-md">
+            Lưu
+        </button>
+    </div>
+</form>
+
 
             <hr class="my-8">
             
@@ -838,8 +810,12 @@ async function exportProfileToPDF(profile) {
                         <canvas id="weightChart"></canvas>
                     </div>
                     <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
-                        <canvas id="bpChart"></canvas>
-                    </div>
+    <canvas id="systolicChart"></canvas>
+</div>
+<div class="bg-gray-50 p-4 rounded-lg shadow-inner">
+    <canvas id="diastolicChart"></canvas>
+</div>
+
                     <div class="bg-gray-50 p-4 rounded-lg shadow-inner">
                         <canvas id="heartRateChart"></canvas>
                     </div>
@@ -926,4 +902,12 @@ async function exportProfileToPDF(profile) {
 
 </body>
 </html>
+
+
+
+
+
+
+
+
 
