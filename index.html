@@ -23,16 +23,20 @@ const firebaseConfig = {
   appId: "1:838493203134:web:4064d659ea5409ae780cef",
   measurementId: "G-G51BKKHGL3"
 };
-        
+   
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
         import { 
             getAuth, 
             signInWithEmailAndPassword, 
             signOut, 
             onAuthStateChanged, 
             updatePassword, 
-            createUserWithEmailAndPassword 
+            createUserWithEmailAndPassword,
+	    sendPasswordResetEmail
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
         import { 
             getFirestore, 
             collection, 
@@ -54,6 +58,12 @@ const firebaseConfig = {
             
             // Listen to auth state changes
             onAuthStateChanged(auth, handleAuthStateChange);
+	   // Lắng nghe sự kiện "input" trên ô tìm kiếm để lọc hồ sơ
+	    profileSearchInput.addEventListener('input', () => {
+   	  // Khi người dùng gõ, gọi lại hàm lắng nghe hồ sơ.
+  	  // Hàm này sẽ lấy dữ liệu từ Firebase và tự động lọc
+  	  listenForProfiles();
+	});
         };
         
         // --- UI Elements ---
@@ -68,7 +78,7 @@ const firebaseConfig = {
         const healthDataForm = document.getElementById('health-data-form');
         const loadingIndicator = document.getElementById('loading-indicator');
         const chartsSection = document.getElementById('charts-section');
-
+	const profileSearchInput = document.getElementById('profile-search');
         // All modals and dialogs
         const messageBox = document.getElementById('message-box');
         const changePasswordModal = document.getElementById('change-password-modal');
@@ -230,82 +240,101 @@ const firebaseConfig = {
             }
         });
 
-        function renderProfiles(profiles) {
-            profileList.innerHTML = '';
-            if (profiles.length === 0) {
-                profileList.innerHTML = '<p class="text-gray-500 text-center w-full">Chưa có hồ sơ nào. Hãy thêm hồ sơ mới!</p>';
-                return;
-            }
-
-            profiles.forEach(profile => {
-                const profileCard = document.createElement('div');
-                profileCard.className = 'flex-shrink-0 bg-white p-6 rounded-xl shadow-md flex flex-col justify-between w-full sm:w-64 min-h-64 cursor-pointer hover:shadow-lg transition-shadow duration-300';
-                profileCard.innerHTML = `
-                    <div>
-                        <h3 class="text-xl font-bold text-indigo-600 mb-2">${profile.name}</h3>
-                        <div class="space-y-1 text-sm text-gray-700">
-                            <p><strong>Tuổi:</strong> ${profile.age}</p>
-                            <p><strong>Nơi ở:</strong> ${profile.address}</p>
-                            <p><strong>Ghi chú:</strong> ${profile.notes}</p>
-                            <p><strong>Tạo bởi:</strong> ${profile.creatorEmail || 'N/A'}</p>
-			    <p><strong>Ngày tạo:</strong> ${profile.createdAt 
-                 	    ? (profile.createdAt.toDate 
-     			    ? profile.createdAt.toDate().toLocaleDateString('vi-VN') 
-     		            : new Date(profile.createdAt).toLocaleDateString('vi-VN')) 
-    			    : 'N/A'}</p>
-
-                        </div>
-                    </div>
-                    <div class="flex justify-end space-x-2 mt-4">
-                        <button data-id="${profile.id}" class="view-btn bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-300 focus:outline-none"><i class="fas fa-eye"></i></button>
-                        <button data-id="${profile.id}" class="edit-btn bg-yellow-500 text-white p-2 rounded-full hover:bg-yellow-600 transition duration-300 focus:outline-none"><i class="fas fa-edit"></i></button>
-                        <button data-id="${profile.id}" class="delete-btn bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition duration-300 focus:outline-none"><i class="fas fa-trash-alt"></i></button>
-			<button data-id="${profile.id}" class="export-pdf-btn bg-green-500 text-white p-2 rounded-full hover:bg-green-600 transition duration-300"><i class="fas fa-file-export"></i></button>
-                    </div>
-                `;
-                profileList.appendChild(profileCard);
-            });
-            
-            // Attach event listeners to the profile list container using event delegation
-            profileList.addEventListener('click', (e) => {
-                const targetBtn = e.target.closest('button');
-                if (!targetBtn) return;
-                const profileId = targetBtn.dataset.id;
-                
-                if (targetBtn.classList.contains('view-btn')) {
-                    currentProfileId = profileId;
-                    healthDataSection.classList.remove('hidden');
-                    listenForHealthData(currentProfileId);
-                    healthDataSection.scrollIntoView({ behavior: 'smooth' });
-                } else if (targetBtn.classList.contains('edit-btn')) {
-                    const profileToEdit = profiles.find(p => p.id === profileId);
-                    document.getElementById('profile-modal-title').textContent = "Sửa Hồ Sơ";
-                    document.getElementById('profile-id').value = profileToEdit.id;
-                    document.getElementById('profile-name').value = profileToEdit.name;
-                    document.getElementById('profile-age').value = profileToEdit.age;
-                    document.getElementById('profile-address').value = profileToEdit.address;
-                    document.getElementById('profile-note').value = profileToEdit.notes;
-                    profileModal.classList.remove('hidden');
-                } else if (targetBtn.classList.contains('delete-btn')) {
-                    profileToDeleteId = profileId;
-                    deleteConfirmModal.classList.remove('hidden');
-               } else if (targetBtn.classList.contains('export-pdf-btn')) {
-    		    const profileToExport = profiles.find(p => p.id === profileId);
-
-                  // Hiển thị dữ liệu và vẽ chart trước
-                    currentProfileId = profileToExport.id;
-                    healthDataSection.classList.remove('hidden');
-                    listenForHealthData(currentProfileId);
-
-                  // Đợi 500ms cho Chart.js render xong rồi mới export
-                 setTimeout(() => {
-                   exportProfileToPDF(profileToExport);
-                }, 500);
-                }
 
 
-            });
+
+
+
+function renderProfiles(profiles) {
+    profileList.innerHTML = '';
+
+    // Lấy giá trị từ ô tìm kiếm và chuyển thành chữ thường
+    const searchQuery = profileSearchInput.value.toLowerCase();
+
+    // Lọc danh sách hồ sơ, chỉ kiểm tra trường 'name'
+    const filteredProfiles = profiles.filter(profile => {
+        // Lấy tên hồ sơ và chuyển thành chữ thường để so sánh không phân biệt chữ hoa, chữ thường
+        const name = (profile.name || '').toLowerCase();
+        
+        // Trả về true nếu tên hồ sơ chứa chuỗi tìm kiếm
+        return name.includes(searchQuery);
+    });
+
+    if (filteredProfiles.length === 0) {
+        profileList.innerHTML = '<p class="text-gray-500 text-center w-full">Không tìm thấy hồ sơ nào phù hợp với tên đã nhập.</p>';
+        return;
+    }
+
+    // Hiển thị danh sách hồ sơ đã được lọc
+    filteredProfiles.forEach(profile => {
+        const profileCard = document.createElement('div');
+        profileCard.className = 'flex-shrink-0 bg-white p-6 rounded-xl shadow-md flex flex-col justify-between w-full sm:w-64 min-h-64 cursor-pointer hover:shadow-lg transition-shadow duration-300';
+        profileCard.innerHTML = `
+            <div>
+                <h3 class="text-xl font-bold text-indigo-600 mb-2">${profile.name}</h3>
+                <div class="space-y-1 text-sm text-gray-700">
+                    <p><strong>Tuổi:</strong> ${profile.age}</p>
+                    <p><strong>Nơi ở:</strong> ${profile.address}</p>
+                    <p><strong>Ghi chú:</strong> ${profile.notes}</p>
+                    <p><strong>Tạo bởi:</strong> ${profile.creatorEmail || 'N/A'}</p>
+                    <p><strong>Ngày tạo:</strong> ${profile.createdAt 
+                        ? (profile.createdAt.toDate 
+                        ? profile.createdAt.toDate().toLocaleDateString('vi-VN') 
+                        : new Date(profile.createdAt).toLocaleDateString('vi-VN')) 
+                        : 'N/A'}</p>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 mt-4">
+                <button data-id="${profile.id}" class="view-btn bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-300 focus:outline-none"><i class="fas fa-eye"></i></button>
+                <button data-id="${profile.id}" class="edit-btn bg-yellow-500 text-white p-2 rounded-full hover:bg-yellow-600 transition duration-300 focus:outline-none"><i class="fas fa-edit"></i></button>
+                <button data-id="${profile.id}" class="delete-btn bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition duration-300 focus:outline-none"><i class="fas fa-trash-alt"></i></button>
+                <button data-id="${profile.id}" class="export-pdf-btn bg-green-500 text-white p-2 rounded-full hover:bg-green-600 transition duration-300"><i class="fas fa-file-export"></i></button>
+            </div>
+        `;
+        profileList.appendChild(profileCard);
+    });
+    
+    // Gắn lại trình lắng nghe sự kiện
+    profileList.addEventListener('click', (e) => {
+        const targetBtn = e.target.closest('button');
+        if (!targetBtn) return;
+        const profileId = targetBtn.dataset.id;
+        
+        if (targetBtn.classList.contains('view-btn')) {
+            currentProfileId = profileId;
+            healthDataSection.classList.remove('hidden');
+            listenForHealthData(currentProfileId);
+            healthDataSection.scrollIntoView({ behavior: 'smooth' });
+        } else if (targetBtn.classList.contains('edit-btn')) {
+            const profileToEdit = profiles.find(p => p.id === profileId);
+            document.getElementById('profile-modal-title').textContent = "Sửa Hồ Sơ";
+            document.getElementById('profile-id').value = profileToEdit.id;
+            document.getElementById('profile-name').value = profileToEdit.name;
+            document.getElementById('profile-age').value = profileToEdit.age;
+            document.getElementById('profile-address').value = profileToEdit.address;
+            document.getElementById('profile-note').value = profileToEdit.notes;
+            profileModal.classList.remove('hidden');
+        } else if (targetBtn.classList.contains('delete-btn')) {
+            profileToDeleteId = profileId;
+            deleteConfirmModal.classList.remove('hidden');
+        } else if (targetBtn.classList.contains('export-pdf-btn')) {
+            const profileToExport = profiles.find(p => p.id === profileId);
+            currentProfileId = profileToExport.id;
+            healthDataSection.classList.remove('hidden');
+            listenForHealthData(currentProfileId);
+            setTimeout(() => {
+                exportProfileToPDF(profileToExport);
+                exportProfileToCSV(profileToExport);
+            }, 500);
         }
+    });
+}
+
+
+
+
+
+
 
         // Real-time listener for profiles
         function listenForProfiles() {
@@ -664,6 +693,95 @@ async function exportProfileToPDF(profile) {
         showLoading(false);
     }
 }
+
+
+
+
+async function exportProfileToCSV(profile) {
+    try {
+        showLoading(true);
+
+        const q = query(collection(db, 'healthRecords'), where("profileId", "==", profile.id));
+        const querySnapshot = await getDocs(q);
+
+        const healthRecords = [];
+        querySnapshot.forEach(doc => {
+            healthRecords.push({ id: doc.id, ...doc.data() });
+        });
+
+        // 1. Tạo chuỗi CSV với thông tin hồ sơ
+        let csvContent = "";
+        csvContent += `Họ tên: ${profile.name}\n`;
+        csvContent += `Tuổi: ${profile.age}\n`;
+        csvContent += `Nơi ở: ${profile.address}\n`;
+        csvContent += `Ghi chú: "${profile.notes || 'Không có'}"\n\n`; // Thêm ghi chú hồ sơ
+
+        // 2. Thêm tiêu đề cột và dữ liệu sức khỏe
+        const headers = ["Ngày", "Cân nặng (kg)", "Huyết áp", "Nhịp tim (bpm)", "Giấc ngủ (giờ)", "Bước chân", "Ghi chú"];
+        csvContent += headers.join(",") + "\n";
+
+        healthRecords.forEach(rec => {
+            const date = rec.date || '';
+            const weight = rec.weight || '';
+            const bp = rec.bloodPressure || '';
+            const hr = rec.heartRate || '';
+            const sleep = rec.sleep || '';
+            const steps = rec.steps || '';
+            const notes = rec.notes ? `"${rec.notes.replace(/"/g, '""')}"` : '';
+
+            const row = [date, weight, bp, hr, sleep, steps, notes].join(",");
+            csvContent += row + "\n";
+        });
+
+        // 3. Tạo và tải xuống file CSV (sửa lỗi font bằng cách thêm '\ufeff')
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        const filename = `${profile.name.replace(/\s/g, '')}_${profile.age}.csv`;
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showMessage("Xuất CSV thành công!");
+
+    } catch (error) {
+        console.error("Export CSV failed:", error);
+        showMessage("Xuất CSV thất bại.");
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Thêm event listener cho liên kết "Quên mật khẩu"
+// Thêm event listener cho liên kết "Quên mật khẩu"
+document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+
+    // Kiểm tra xem email có được nhập hay không
+    if (!email) {
+        showMessage("Vui lòng nhập email của bạn vào ô đăng nhập để nhận link khôi phục.");
+        return;
+    }
+
+    showLoading();
+    try {
+        await sendPasswordResetEmail(auth, email);
+        showMessage("Một email khôi phục mật khẩu đã được gửi đến " + email + ". Vui lòng kiểm tra hộp thư của bạn.");
+    } catch (error) {
+        let errorMessage = "Không thể gửi email khôi phục mật khẩu. Vui lòng thử lại.";
+        if (error.code === 'auth/user-not-found') {
+            errorMessage = "Email này không tồn tại trong hệ thống. Vui lòng kiểm tra lại.";
+        }
+        showMessage(errorMessage);
+        console.error("Password reset failed:", error);
+    } finally {
+        showLoading(false);
+    }
+});
+
+
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
@@ -715,6 +833,7 @@ async function exportProfileToPDF(profile) {
         <!-- Biểu mẫu đăng nhập -->
         <div id="login-form" class="bg-white p-8 md:p-12 rounded-xl shadow-2xl w-full max-w-md mx-auto">
             <h2 class="text-4xl font-extrabold text-center text-indigo-600 mb-8">Đăng Nhập</h2>
+	    <a id="forgot-password-link" href="#" class="text-sm text-blue-600 hover:text-blue-500 float-right mt-2">Quên mật khẩu?</a>
             <form>
                 <div class="mb-5">
                     <label for="login-email" class="block text-gray-700 font-semibold mb-2">Email</label>
@@ -731,8 +850,12 @@ async function exportProfileToPDF(profile) {
 
         <!-- Nội dung chính (sau khi đăng nhập) -->
         <div id="main-content" class="hidden mt-8">
+	    <div class="mt-8">
+           <label for="profile-search" class="block text-gray-700 font-bold mb-2">Lọc hồ sơ</label>
+           <input type="text" id="profile-search" placeholder="Nhập họ và tên.........." class="w-full p-3 border rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+           </div>
             <h2 class="text-3xl font-bold text-gray-700 mb-6 text-center">Danh sách Hồ sơ</h2>
-            <div id="profile-list" class="flex overflow-x-auto gap-6 p-4 -mx-4 pb-6 scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-indigo-100">
+            <div id="profile-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto max-h-[600px] p-4">
                 <!-- Hồ sơ sẽ được hiển thị ở đây -->
             </div>
         </div>
@@ -902,6 +1025,9 @@ async function exportProfileToPDF(profile) {
 
 </body>
 </html>
+
+
+
 
 
 
